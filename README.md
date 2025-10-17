@@ -12,9 +12,9 @@ The tool was made specifically to trace sewer networks and delineate sewersheds 
 This tool is a work-in-progress and therefore several features are not implemented, and the current scope of the project is small.
 
 ### Features & TODO
-- [x] Create connected graphs from csv or other geospatial files
-- [x] Travese networks and return subsets of connected features
-- [ ] Add environment tools / library requirements
+- [X] Create connected graphs from csv or other geospatial files
+- [X] Travese networks and return subsets of connected features
+- [X] Add environment tools / library requirements
 - [ ] Add tools to verify spatial geometry
 - [ ] Generalize to other use-cases
 - [ ] Add option to output to spatial data (apply the subnetwork to spatial data)
@@ -22,10 +22,26 @@ This tool is a work-in-progress and therefore several features are not implement
 - [ ] Add adjacent QGIS plugin
 
 
+### Requirements
+Python ~v3.13 is required. 
+Required libraries are listed in the `requirements.txt` file. 
+
+Conda is recommended as an environment manager for installing python libraries. Install [here](https://www.anaconda.com/docs/getting-started/miniconda/main).
+
+To create a conda environment:
+`conda create --name nwtrace --file requirements.txt`
+
+To install directly to python using pip:
+`pip install -r requirements.txt`
+
 ### Sample Data
 Some sample files are included for testing the library yourself are provided. This includes a script (`sstrace.py`) and a notebook (`sstrace.ipynb`) that can be run as a python notebook in VSCode or software of your choice. The sample data should result in traced gravity main sewer networks from seven outfalls in the City of Toronto. A sample dataset is provided (`sewer_test.geojson`) which is a subset of the City of Toronto gravity main sewer network provided by [Open Data Toronto](https://open.toronto.ca/dataset/sewer-gravity-mains/), clipped to a subwatershed of the Humber River (Note that further analysis using this clipped data may result in errors where the traced network expands beyond the clip boundary).
 
 The output can be visualized in a GIS software of your choice.
+
+To run the sample program, either use `sstrace.ipynb` in a software of your choice
+OR
+Run `python sstrace.py` 
 
 #### Instructions for QGIS
 
