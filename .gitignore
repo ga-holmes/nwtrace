@@ -1,3 +1,6 @@
 data/more
 out/*.csv
 out/*.gpkg
+*.qmd
+__pycache__
+sstrace_interactive.py

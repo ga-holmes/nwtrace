@@ -1,10 +1,8 @@
 # script to create subset of all gravity mains that connect directly to a given outfall
 
-import sys
 import geopandas as gpd
 import pandas as pd
 from tqdm import tqdm
-import os
 
 def dfs_recursive(segment_lookup, node_lookup, v, visited=set(), edges=[]):
     """
