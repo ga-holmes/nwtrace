@@ -18,7 +18,8 @@ This tool is a work-in-progress and therefore several features are not implement
 - [] Add tools to verify spatial geometry
 - [] Generalize to other use-cases
 - [] Add option to output to spatial data (apply the subnetwork to spatial data)
-- [] refactor to proper library form
+- [] Refactor to proper library form
+- [] Add adjacent QGIS plugin
 
 
 ### Sample Data
