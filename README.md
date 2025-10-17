@@ -14,12 +14,12 @@ This tool is a work-in-progress and therefore several features are not implement
 ### Features & TODO
 - [x] Create connected graphs from csv or other geospatial files
 - [x] Travese networks and return subsets of connected features
-- [] Add environment tools / library requirements
-- [] Add tools to verify spatial geometry
-- [] Generalize to other use-cases
-- [] Add option to output to spatial data (apply the subnetwork to spatial data)
-- [] Refactor to proper library form
-- [] Add adjacent QGIS plugin
+- [ ] Add environment tools / library requirements
+- [ ] Add tools to verify spatial geometry
+- [ ] Generalize to other use-cases
+- [ ] Add option to output to spatial data (apply the subnetwork to spatial data)
+- [ ] Refactor to proper library form
+- [ ] Add adjacent QGIS plugin
 
 
 ### Sample Data
