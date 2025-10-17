@@ -14,6 +14,33 @@ This tool is a work-in-progress and therefore several features are not implement
 ### Features & TODO
 - [x] Create connected graphs from csv or other geospatial files
 - [x] Travese networks and return subsets of connected features
+- [] Add environment tools / library requirements
 - [] Add tools to verify spatial geometry
 - [] Generalize to other use-cases
+- [] Add option to output to spatial data (apply the subnetwork to spatial data)
 - [] refactor to proper library form
+
+
+### Sample Data
+Some sample files are included for testing the library yourself are provided. This includes a script (`sstrace.py`) and a notebook (`sstrace.ipynb`) that can be run as a python notebook in VSCode or software of your choice. The sample data should result in traced gravity main sewer networks from seven outfalls in the City of Toronto. A sample dataset is provided (`sewer_test.geojson`) which is a subset of the City of Toronto gravity main sewer network provided by [Open Data Toronto](https://open.toronto.ca/dataset/sewer-gravity-mains/), clipped to a subwatershed of the Humber River (Note that further analysis using this clipped data may result in errors where the traced network expands beyond the clip boundary).
+
+The output can be visualized in a GIS software of your choice.
+
+#### Instructions for QGIS
+
+After the program is finished, an output `.csv` file will be generated named based on your input parameters.
+
+- Open QGIS
+- Add the sample sewer network file (`sewer_test.geojson`) to the map
+- Add the output `.csv` file
+- Right click on the `sewer_test` layer, select properties (or double click to open properties)
+- Go to 'Joins'
+- Click the '+' icon
+- Select the `.csv` file as your Join Layer.
+- For your fields to join on, Select 'segment_id' and 'Sewer Gravity Asset Identification'
+- Click 'OK' and 'Apply'
+- In the toolbar, click 'Select features by value'
+- Scroll to '[csv filename].field_1
+- Set selection to 'Not equal to', and type 'NULL' in the box
+- Click 'Select Features'. The selected lines will represent the network as connected to the chosen outfalls!
+- You can then extract this from the main file by running the 'Extract selected features' or right click the layer and export selected features.
