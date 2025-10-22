@@ -4,3 +4,4 @@ out/*.gpkg
 *.qmd
 __pycache__
 sstrace_interactive.py
+full_sewers.geojson

@@ -335,6 +335,7 @@ def trace_sewersheds(
 
     all_connected = []
 
+    # build tables
     if upstream_only ^ downstream_only:
 
         # create directional lookup tables
@@ -355,17 +356,8 @@ def trace_sewersheds(
             for node in all_nodes
         }
 
-        if verbose:
-            print(f"Searching Network:")
-
-        for o in tqdm(target_endpoints, disable=(not verbose)):
-            visited_list, edges_list = dfs_directed(segment_lookup, node_lookup, o, set(), [], downstream=downstream_only)
-            
-            for e in edges_list:
-                all_connected.append({"segment_id": e, "exit_point": o})
-
-        if verbose:
-            print(f"Finished!")
+        dfs_func = dfs_directed
+        dsf_kwargs = {"downstream": downstream_only}
 
     else:
         # seperate into separate upstream and downstream tables for each segment
@@ -379,19 +371,26 @@ def trace_sewersheds(
         node_lookup = df_nodes.groupby('node_id')['segment_id'].apply(set).to_dict()
         segment_lookup = df_nodes.groupby('segment_id')['node_id'].apply(set).to_dict()
 
-        # run a depth-first-search of the network
+        dfs_func = dfs
+        dsf_kwargs = {}
 
-        if verbose:
-            print(f"Searching Network:")
+    # run a depth-first-search of the network
+    if verbose:
+        print(f"Searching Network:")
 
-        for o in tqdm(target_endpoints, disable=(True)):
-            visited_list, edges_list = dfs(segment_lookup, node_lookup, o, set(), [])
-            
-            for e in edges_list:
-                all_connected.append({"segment_id": e, "exit_point": o})
+    for o in tqdm(target_endpoints, disable=(not verbose)):
+        visited_list, edges_list = dfs_func(segment_lookup, node_lookup, o, set(), [], **dsf_kwargs)
+        
+        for e in edges_list:
+            all_connected.append({"segment_id": e, "exit_point": o})
 
-        if verbose:
-            print(f"Finished!")
+        # if verbose:
+        #     total_con += len(edges_list)
+        #     print(f"\tfound {len(edges_list)} connections to {o}")
+
+    if verbose:
+        print(f"\nFound {len(edges_list)} connections overall to all {len(target_endpoints)} endpoints")
+        print(f"Finished!")
 
     return all_connected
 
