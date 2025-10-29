@@ -5,7 +5,7 @@ import pandas as pd
 network_path = "data/sewer_test.geojson"
 
 multiple = True
-upstream_only = False
+upstream_only = True
 downstream_only = False
 verbose = True
 
@@ -53,5 +53,10 @@ else:
 
 # Convert to dataframe and output as a csv
 out_df = pd.DataFrame.from_dict(result)
-out_df.to_csv(f'{output_dir}/{outputname_extra}catchment_{"singledir" if upstream_only or downstream_only else "multidir"}{"_ups" if upstream_only and not downstream_only else ""}{"_dwns" if downstream_only and not upstream_only else ""}_{target_endpoints[0] if not multiple else outfall_file.replace('/', '_').replace('.', '_')}.csv')
-
+out_df.to_csv(
+    f'{output_dir}/{outputname_extra}catchment_'
+    f'{"singledir" if upstream_only or downstream_only else "multidir"}'
+    f'{"_ups" if upstream_only and not downstream_only else ""}'
+    f'{"_dwns" if downstream_only and not upstream_only else ""}_'
+    f'{target_endpoints[0] if not multiple else outfall_file.replace("/", "_").replace(".", "_")}.csv'
+)

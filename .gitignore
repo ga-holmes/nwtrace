@@ -5,3 +5,5 @@ out/*.gpkg
 __pycache__
 sstrace_interactive.py
 full_sewers.geojson
+w_sstrace.py
+custom_outfalls.csv

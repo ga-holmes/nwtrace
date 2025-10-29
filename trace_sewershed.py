@@ -331,7 +331,7 @@ def trace_sewersheds(
     grav_main = gpd.read_file(sewer_network_path) 
 
     if verbose:
-        print(f"Preparing {"" if not upstream_only else "directional"} node connection tree...")
+        print(f"Preparing {'' if not upstream_only else 'directional'} node connection tree...")
 
     all_connected = []
 
