@@ -13,7 +13,7 @@ This tool is a work-in-progress and therefore several features are not implement
 - [X] Create connected graphs from csv or other geospatial files
 - [X] Travese networks and return subsets of connected features
 - [X] Add environment tools / library requirements
-- [ ] Refactor to object form
+- [X] Refactor to object form
 - [ ] Add tools to verify spatial geometry
 - [ ] Generalize to other use-cases
 - [ ] Add option to output to spatial data (apply the subnetwork to spatial data)

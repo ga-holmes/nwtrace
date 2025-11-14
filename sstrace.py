@@ -1,5 +1,5 @@
 import os
-from trace_sewershed import *
+from nwtrace import NWTrace
 import pandas as pd
 
 network_path = "data/sewer_test.geojson"
@@ -21,34 +21,33 @@ outfalls = pd.read_csv(outfall_file)[id_field].tolist()
 target_endpoints = outfalls
 # target_endpoints = ["JP5428128690"]
 
-outputname_extra = "example_"
+outputname_extra = "TEST_"
 output_dir = f"./out"
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
 
 result = []
 
+sewershed = NWTrace(
+    network_path=network_path,
+    id_field=sewer_id_field,
+    upstream_field = upstream_field,
+    downstream_field = downstream_field,
+    verbose=verbose,
+    output_dir=output_dir,
+)
+
 if multiple == False:
-    result = trace_sewershed(
-        network_path, 
+    result = sewershed.trace_sewershed(
         target_endpoints[0], 
         upstream_only=upstream_only, 
-        downstream_only=downstream_only, 
-        verbose=verbose, 
-        sewer_id_field=sewer_id_field,
-        upstream_field=upstream_field, 
-        downstream_field=downstream_field
+        downstream_only=downstream_only
     )
 else:
-    result = trace_sewersheds(
-        network_path, 
+    result = sewershed.trace_sewersheds(
         target_endpoints, 
         upstream_only=upstream_only, 
         downstream_only=downstream_only, 
-        verbose=verbose, 
-        sewer_id_field=sewer_id_field,
-        upstream_field=upstream_field,
-        downstream_field=downstream_field
     )
 
 # Convert to dataframe and output as a csv
