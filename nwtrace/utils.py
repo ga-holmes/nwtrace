@@ -1,63 +1,4 @@
 
-
-def dfs_recursive(segment_lookup, node_lookup, v, visited=set(), edges=[]):
-    """
-    Perform a depth-first search on an undirected graph.
-
-    Traverses the graph starting from node `v`, collecting all connected nodes
-    and the edges that were traversed. Designed for undirected networks.
-
-    Parameters
-    ----------
-    segment_lookup : dict
-        Dictionary mapping segment IDs to sets of nodes they connect.
-        Example: {segment_id: {node1, node2}, ...}
-
-    node_lookup : dict
-        Dictionary mapping node IDs to a set of connected segment IDs.
-        Example: {node_id: {segment1, segment2, ...}, ...}
-
-    v : hashable
-        The starting node ID for the DFS traversal.
-
-    visited : set, default empty set()
-        A set of already visited node IDs. Updated in place during recursion.
-
-    edges : list, default []
-        A list of segment IDs representing edges actually traversed.
-        Updated in place during recursion.
-
-    Returns
-    -------
-    visited : set
-        The updated set of visited nodes after the DFS traversal.
-
-    edges : list
-        The updated list of traversed segment IDs.
-    """
-    
-    visited.add(v)
-
-    if v not in node_lookup:
-        return visited, edges
-    
-    for e in node_lookup[v]:
-
-        w = None
-
-        # select the correct node
-        for n in segment_lookup[e]:
-            if n != v:
-                w = n
-
-        # make sure not visited (in cyclical case)
-        if w != None and w not in visited:
-            edges.append(e)
-            visited, edges = dfs_recursive(segment_lookup, node_lookup, w, visited, edges)
-
-    return visited, edges
-
-
 def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
     """
     Perform a depth-first search on an undirected graph.
@@ -194,14 +135,77 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=set(), edges=[], downst
                 stack.append(w)
 
     return visited, edges
+    
+
+def dfs_recursive(segment_lookup, node_lookup, v, visited=set(), edges=[]):
+    """
+    Perform a depth-first search on an undirected graph recursively.
+
+    Traverses the graph starting from node `v`, collecting all connected nodes
+    and the edges that were traversed. Designed for undirected networks.
+
+    Note: May throw RecursionError: maximum recursion depth exceeded
+
+    Parameters
+    ----------
+    segment_lookup : dict
+        Dictionary mapping segment IDs to sets of nodes they connect.
+        Example: {segment_id: {node1, node2}, ...}
+
+    node_lookup : dict
+        Dictionary mapping node IDs to a set of connected segment IDs.
+        Example: {node_id: {segment1, segment2, ...}, ...}
+
+    v : hashable
+        The starting node ID for the DFS traversal.
+
+    visited : set, default empty set()
+        A set of already visited node IDs. Updated in place during recursion.
+
+    edges : list, default []
+        A list of segment IDs representing edges actually traversed.
+        Updated in place during recursion.
+
+    Returns
+    -------
+    visited : set
+        The updated set of visited nodes after the DFS traversal.
+
+    edges : list
+        The updated list of traversed segment IDs.
+    """
+    
+    visited.add(v)
+
+    if v not in node_lookup:
+        return visited, edges
+    
+    for e in node_lookup[v]:
+
+        w = None
+
+        # select the correct node
+        for n in segment_lookup[e]:
+            if n != v:
+                w = n
+
+        # make sure not visited (in cyclical case)
+        if w != None and w not in visited:
+            edges.append(e)
+            visited, edges = dfs_recursive(segment_lookup, node_lookup, w, visited, edges)
+
+    return visited, edges
+
 
 def dfs_directed_recursive(segment_lookup, node_lookup, v, visited=set(), edges=[], downstream=False):
     """
-    Perform a depth-first search on a directed graph.
+    Perform a depth-first search on a directed graph recursively.
 
     Traverses the graph starting from node `v`, following only edges that flow
     into the current node (default downstream=False) or away from the current node (downstream=True). Collects all reachable nodes and
     the edges traversed.
+
+    Note: May throw RecursionError: maximum recursion depth exceeded
 
     Parameters
     ----------

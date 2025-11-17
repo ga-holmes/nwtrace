@@ -19,7 +19,27 @@ class NWTrace:
         output_dir: str | Path = "./out",
         verbose: bool = False,
     ) -> None:
-        
+        """
+        Initializes a NWTrace object instance
+
+        Parameters
+        ----------
+        network_path : str | Path
+            Filepath to the file containing the node-line connections (must be openable by Pandas, may include spatial data)
+        id_field : str, optional
+            The name of the field containing line and node identifiers, by default 'Sewer Gravity Asset Identification'
+        upstream_field : str, optional
+            The name of the field containing the ID for upstream nodes, by default 'Sewer Gravity Upstream Maintenance Hole'
+        downstream_field : str, optional
+            The name of the field containing the ID for downstream nodes, by default 'Sewer Gravity Downstream Maintenance Hole'
+        working_dir : str | Path, optional
+            Path to a specified working directory, by default "."
+        output_dir : str | Path, optional
+            Path to an output directory, by default "./out"
+        verbose : bool, optional
+            Set to True to print progress indicators, by default False
+        """
+
         # Set up paths, throws FileNotFoundError if issues occur
         self.network_path = Path(network_path)
         
@@ -50,7 +70,15 @@ class NWTrace:
 
         
 
-    def _create_lookup(self) -> dict:
+    def _create_lookup(self) -> tuple[dict, dict]:
+        """
+        Builds lookup tables for nodes and lines that can be traversed as a connected tree based on the object attributes.
+
+        Returns
+        -------
+        node_lookup, segment_lookup: tuple[dict, dict]
+            The respective lookup tables for nodes and segments
+        """
         # seperate into separate upstream and downstream tables for each segment
         df_grav_ups = self.network_main[[self.id_field, self.upstream_field]].rename(columns={self.upstream_field: 'node_id', self.id_field: 'segment_id'})
         df_grav_dwns = self.network_main[[self.id_field, self.downstream_field]].rename(columns={self.downstream_field: 'node_id', self.id_field: 'segment_id'})
@@ -65,10 +93,16 @@ class NWTrace:
         return node_lookup, segment_lookup
     
     def _create_directional_lookup(
-        self,
-        upstream: bool = False,
-        downstream: bool = False
-    ) -> dict:
+        self
+    ) -> tuple[dict, dict]:
+        """
+        Builds directional lookup tables for nodes and lines that can be traversed as a connected tree based on the object attributes.
+
+        Returns
+        -------
+        dir_node_lookup, dir_segment_lookup: tuple[dict, dict]
+            The respective directional lookup tables for nodes and segments
+        """
         
         # create directional lookup tables
         df_grav_dir = self.network_main.rename(columns={self.upstream_field: 'from', self.downstream_field: 'to', self.id_field: 'segment_id'})
@@ -95,13 +129,12 @@ class NWTrace:
         target_endpoints, 
         upstream_only=False,
         downstream_only=False, 
-    ):
+    ) -> list:
         """
         Trace all line segments in a geospatial sewer network connected to a set of target endpoints.
 
-        Reads a geospatial file containing line segments, where each segment has upstream and 
-        downstream nodes. Returns all segments connected to each target endpoint, optionally
-        following only upstream connections.
+        Returns all segments connected to each target endpoint, optionally
+        following only upstream or downstream connections. If both upstream and downstream are set to True, both directions will be traced (Same as both False).
 
         Parameters
         ----------
@@ -120,18 +153,6 @@ class NWTrace:
             If True, only follow downstream connections when tracing the network.
             If False, follow all connections (upstream and downstream).
             If both upstream_only and downstream_only are True, all connections will be followed (upstream and downstream)
-
-        sewer_id_field : str, default 'Sewer Gravity Asset Identification'
-            Name of the field in the geospatial data representing the unique segment ID.
-
-        upstream_field : str, default 'Sewer Gravity Upstream Maintenance Hole'
-            Name of the field representing the upstream node for each segment.
-
-        downstream_field : str, default 'Sewer Gravity Downstream Maintenance Hole'
-            Name of the field representing the downstream node for each segment.
-
-        verbose : bool, default False
-            If True, prints progress and debugging information.
 
         Returns
         -------
@@ -227,18 +248,6 @@ class NWTrace:
             If True, only follow downstream connections when tracing the network.
             If False, follow all connections (upstream and downstream).
             If both upstream_only and downstream_only are True, all connections will be followed (upstream and downstream)
-
-        sewer_id_field : str, default 'Sewer Gravity Asset Identification'
-            Name of the field in the geospatial data representing the unique segment ID.
-
-        upstream_field : str, default 'Sewer Gravity Upstream Maintenance Hole'
-            Name of the field representing the upstream node for each segment.
-
-        downstream_field : str, default 'Sewer Gravity Downstream Maintenance Hole'
-            Name of the field representing the downstream node for each segment.
-
-        verbose : bool, default False
-            If True, prints progress and debugging information.
 
         Returns
         -------
