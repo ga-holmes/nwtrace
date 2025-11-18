@@ -106,11 +106,16 @@ class NWTrace:
         
         # create directional lookup tables
         df_grav_dir = self.network_main.rename(columns={self.upstream_field: 'from', self.downstream_field: 'to', self.id_field: 'segment_id'})
+        
+        # Convert fields to lists (allows extensibility later on)
+        df_grav_dir["from"] = df_grav_dir["from"].apply(lambda x: [x] if pd.notnull(x) else [])
+        df_grav_dir["to"]   = df_grav_dir["to"].apply(lambda x: [x] if pd.notnull(x) else [])
+
         dir_segment_lookup = (df_grav_dir.set_index("segment_id")[["from", "to"]].to_dict(orient="index"))
 
-        # create separate node tables for inflow and outflow
-        df_node_in = df_grav_dir[["to", "segment_id"]].rename(columns={"to": "node_id"})
-        df_node_out = df_grav_dir[["from", "segment_id"]].rename(columns={"from": "node_id"})
+        # create separate node tables for inflow and outflow (explodes the lists created in the previous step)
+        df_node_in = df_grav_dir.explode("to")[["to", "segment_id"]].rename(columns={"to": "node_id"})
+        df_node_out = df_grav_dir.explode("from")[["from", "segment_id"]].rename(columns={"from": "node_id"})
 
         node_in = df_node_in.groupby("node_id")["segment_id"].apply(list).to_dict()
         node_out = df_node_out.groupby("node_id")["segment_id"].apply(list).to_dict()

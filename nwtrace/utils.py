@@ -63,7 +63,7 @@ def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
 
     return visited, edges
 
-def dfs_directed(segment_lookup, node_lookup, v, visited=set(), edges=[], downstream=False):
+def dfs_directed(segment_lookup, node_lookup, v, visited=None, edges=None, downstream=False):
     """
     Perform a depth-first search on a directed graph.
 
@@ -85,11 +85,11 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=set(), edges=[], downst
     v : hashable
         The starting node ID for the DFS traversal.
 
-    visited : set, default empty set()
-        A set of already visited node IDs. Updated in place during recursion.
+    visited : set, default None
+        A set of already visited node IDs. Updated in place during recursion. Will set to an empty set if None
 
-    edges : list, default []
-        A list of segment IDs representing edges actually traversed.
+    edges : list, None
+        A list of segment IDs representing edges actually traversed. Will set to an empty array in None
         Updated in place during recursion.
 
     downstream : bool, default False
@@ -103,6 +103,12 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=set(), edges=[], downst
     edges : list
         The updated list of traversed segment IDs.
     """
+
+    # Set None values
+    if visited is None:
+        visited = set()
+    if edges is None:
+        edges = []
 
     stack = [v]
 
@@ -119,20 +125,24 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=set(), edges=[], downst
             continue
         
         if downstream:
-            edges_to_follow = node_lookup[v]["out"]
-            next_node = lambda e: segment_lookup.get(e)["to"]
+            node_dir = "out"
+            seg_dir = "to"
         else:
-            edges_to_follow = node_lookup[v]["in"]
-            next_node = lambda e: segment_lookup.get(e)["from"]
+            node_dir = "in"
+            seg_dir = "from"
         
-        for e in edges_to_follow:
+        for e in node_lookup[v][node_dir]:
 
-            w = next_node(e)
+            seg = segment_lookup.get(e)
+            if not seg:
+                continue
 
-            # make sure not visited (in cyclical case)
-            if w != None and w not in visited:
-                edges.append(e)
-                stack.append(w)
+            for w in seg[seg_dir]:
+        
+                # make sure not visited (in cyclical case)
+                if w != None and w not in visited:
+                    edges.append(e)
+                    stack.append(w)
 
     return visited, edges
     
