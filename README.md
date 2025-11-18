@@ -14,7 +14,7 @@ This tool is a work-in-progress and therefore several features are not implement
 - [X] Travese networks and return subsets of connected features
 - [X] Add environment tools / library requirements
 - [X] Refactor to object form
-- [ ] Add capability to add new connections to a lookup table.
+- [X] Add capability to add new connections to a lookup table.
 - [ ] Add tools to verify spatial geometry
 - [ ] Add robust error handling
 - [ ] Refactor as module

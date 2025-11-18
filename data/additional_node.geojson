@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "fitting_connections",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::26717" } },
+"features": [
+{ "type": "Feature", "properties": { "FACILITYID": "CN16608", "TO_FIXED": "SL23453" }, "geometry": { "type": "Point", "coordinates": [ 622228.072833996848203, 4836970.402275018393993, 0.0 ] } }
+]
+}

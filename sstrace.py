@@ -1,6 +1,7 @@
 import os
 from nwtrace import NWTrace
 import pandas as pd
+import geopandas as gpd
 
 network_path = "data/sewer_test.geojson"
 
@@ -28,6 +29,7 @@ if not os.path.exists(output_dir):
 
 result = []
 
+# Initialize the object
 sewershed = NWTrace(
     network_path=network_path,
     id_field=sewer_id_field,
@@ -36,6 +38,15 @@ sewershed = NWTrace(
     verbose=verbose,
     output_dir=output_dir,
 )
+
+# additional connections
+fittings = gpd.read_file("data/additional_node.geojson")
+nodes_up = (fittings[["FACILITYID", "TO_FIXED"]]
+            .dropna(subset=["FACILITYID", "TO_FIXED"]) # remove rows with None values
+            .rename(columns={"FACILITYID": 'node_id', "TO_FIXED": 'segment_id'})
+            .to_dict(orient="records"))
+
+sewershed.add_upstream_nodes(nodes_up)
 
 if multiple == False:
     result = sewershed.trace_sewershed(
