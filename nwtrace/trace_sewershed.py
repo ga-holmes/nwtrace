@@ -11,7 +11,7 @@ class NWTrace:
 
     def __init__(
         self,
-        network_path: str | Path,
+        network: str | Path,
         id_field: str ='Sewer Gravity Asset Identification', 
         upstream_field: str ='Sewer Gravity Upstream Maintenance Hole', 
         downstream_field: str ='Sewer Gravity Downstream Maintenance Hole',
@@ -24,7 +24,7 @@ class NWTrace:
 
         Parameters
         ----------
-        network_path : str | Path
+        network : str | Path
             Filepath to the file containing the node-line connections (must be openable by Pandas, may include spatial data)
         id_field : str, optional
             The name of the field containing line and node identifiers, by default 'Sewer Gravity Asset Identification'
@@ -41,7 +41,7 @@ class NWTrace:
         """
 
         # Set up paths, throws FileNotFoundError if issues occur
-        self.network_path = Path(network_path)
+        self.network_path = Path(network)
         
         self.working_dir = Path(working_dir)
         Path(self.working_dir).mkdir(parents=True, exist_ok=True)
@@ -53,9 +53,15 @@ class NWTrace:
 
         if self.verbose: print(f"Loading network file: `{self.network_path}`...")
 
-        # load file using pandas
-        # TODO: handle incompatible file error
-        self.network_main = gpd.read_file(self.network_path)
+        # load file using pandas or assign
+        if isinstance(network, (str, Path)):
+            self.network_main = gpd.read_file(network)
+        elif isinstance(network, gpd.GeoDataFrame):
+            self.network_main = network
+        else:
+            raise ValueError(
+                "'network' must be a valid file path or a GeoDataFrame."
+            )
 
         # TODO: verify that given fields are present in the loaded file
 
@@ -334,6 +340,33 @@ class NWTrace:
 
         if self.verbose:
             print(f"Added {added} node-segment connection(s)\nCreated {created} new node(s)\nCreated {s_created} new segment(s).\n")
+
+
+    # Getters
+
+    def get_lookup_tables(self) -> tuple[dict, dict]:
+        """
+        Returns Node and Segment lookup tables for the NWTrace object
+
+        Returns
+        -------
+        node_lookup, segment_lookup: tuple[dict, dict]
+            Node and Segment lookup tables for the NWTrace object
+        """
+
+        return self.node_lookup, self.segment_lookup
+    
+    def get_directional_lookup_tables(self) -> tuple[dict, dict]:
+        """
+        Returns directional Node and Segment lookup tables for the NWTrace object
+
+        Returns
+        -------
+        dir_node_lookup, dir_segment_lookup: tuple[dict, dict]
+            Sirectional Node and Segment lookup tables for the NWTrace object
+        """
+
+        return self.dir_node_lookup, self.dir_segment_lookup
         
             
 

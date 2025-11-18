@@ -31,7 +31,7 @@ result = []
 
 # Initialize the object
 sewershed = NWTrace(
-    network_path=network_path,
+    network=network_path,
     id_field=sewer_id_field,
     upstream_field = upstream_field,
     downstream_field = downstream_field,

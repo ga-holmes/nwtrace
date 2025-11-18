@@ -1,3 +1,5 @@
+from pathlib import Path
+import geopandas as gpd
 
 def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
     """
@@ -271,3 +273,78 @@ def dfs_directed_recursive(segment_lookup, node_lookup, v, visited=set(), edges=
             visited, edges = dfs_directed_recursive(segment_lookup, node_lookup, w, visited, edges, downstream=downstream)
 
     return visited, edges
+
+
+def verify_network_geometry(
+        lines: str | Path | gpd.GeoDataFrame,
+        points: str | Path | gpd.GeoDataFrame,
+        node_lookup: dict,
+        segment_lookup: dict,
+        threshold: int = 0
+    ) -> dict:
+    """
+    Given a geospatial vector file that contains IDs that correspond to 
+
+    Parameters
+    ----------
+    lines : str | Path | gpd.GeoDataFrame
+        Geometry or a filepath to the geometry that corresponds to the segments in the network
+    points : str | Path | gpd.GeoDataFrame
+        Geometry or a filepath to the geometry that corresponds to the nodes in the network
+    node_lookup : dict
+        Lookup table for node connections, may be directional or non-direcitonal
+    segment_lookup : dict
+        Lookup table for segment connections, may be directional or non-direcitonal
+    threshold : int, optional
+        distance to search within when checking connections (unit is CRS-dependent based on the CRS for the input file), by default 0
+
+    Returns
+    -------
+    dict
+        Returns a dictionary contatining a summary of geomerty errors found, empty set if there are none
+    """
+
+    # Verify input geometry values
+
+    if isinstance(lines, (str, Path)):
+        segments = gpd.read_file(lines)
+    elif isinstance(lines, gpd.GeoDataFrame):
+        segments = lines
+    else:
+        raise ValueError(
+            "'lines' must be a file path or GeoDataFrame."
+        )
+
+    if isinstance(points, (str, Path)):
+        nodes = gpd.read_file(points)
+    elif isinstance(points, gpd.GeoDataFrame):
+        nodes = points
+    else:
+        raise ValueError(
+            "'points' must be a file path or GeoDataFrame."
+        )
+    
+    # Check if the given lookup table is directional or not
+    # NOTE: Maybe only accept the multi-directional segment lookup table in this case? (Simplifies iteration the most)
+
+    # For every connection pair, check if nodes and segments intersect correctly
+
+        # select current segment geometry
+
+        # for each lookup node connection
+
+            # select current node geometry
+            
+            # if node geometry exists:
+                
+                # if node is NOT intersecting with segment within threshold:
+
+                    # Add to errors dict with spatial error
+
+            # else:
+
+                # add to errors with invalid connection error
+
+    errors_found = {}
+
+    return errors_found
