@@ -15,7 +15,8 @@ This tool is a work-in-progress and therefore several features are not implement
 - [X] Add environment tools / library requirements
 - [X] Refactor to object form
 - [X] Add capability to add new connections to a lookup table.
-- [ ] Add tools to verify spatial geometry
+- [X] Add tools to verify spatial geometry
+- [ ] Document spatial geometry verification tools
 - [ ] Add robust error handling
 - [ ] Refactor as module
 - [ ] Generalize to other use-cases

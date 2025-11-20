@@ -1,5 +1,6 @@
 from pathlib import Path
 import geopandas as gpd
+from tqdm import tqdm
 
 def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
     """
@@ -278,12 +279,13 @@ def dfs_directed_recursive(segment_lookup, node_lookup, v, visited=set(), edges=
 def verify_network_geometry(
         lines: str | Path | gpd.GeoDataFrame,
         points: str | Path | gpd.GeoDataFrame,
-        node_lookup: dict,
-        segment_lookup: dict,
+        lookup_table: dict,
+        line_id_field: str,
+        point_id_field: str,
         threshold: int = 0
-    ) -> dict:
+    ) -> list:
     """
-    Given a geospatial vector file that contains IDs that correspond to 
+    Given two geospatial vector files that contain IDs for nodes and segments that correspond to the given lookup table, checks that connections listed in the tree are geographically connected or close. 
 
     Parameters
     ----------
@@ -291,60 +293,87 @@ def verify_network_geometry(
         Geometry or a filepath to the geometry that corresponds to the segments in the network
     points : str | Path | gpd.GeoDataFrame
         Geometry or a filepath to the geometry that corresponds to the nodes in the network
-    node_lookup : dict
-        Lookup table for node connections, may be directional or non-direcitonal
-    segment_lookup : dict
-        Lookup table for segment connections, may be directional or non-direcitonal
+    lookup_table : dict
+        Lookup table for node connections, may be directional or non-direcitonal NOTE: For now only accepts the multi-directional segment lookup table
+    line_id_field : str
+        The name of the field in the 'lines' dataset that contains the ID that corresponds to the lookup table
+    point_id_field : str
+        The name of the field in the 'points' dataset that contains the ID that corresponds to the lookup table
     threshold : int, optional
         distance to search within when checking connections (unit is CRS-dependent based on the CRS for the input file), by default 0
 
     Returns
     -------
-    dict
-        Returns a dictionary contatining a summary of geomerty errors found, empty set if there are none
+    list
+        Returns a list contatining a summary of geomerty errors found, empty list if there are none
     """
 
     # Verify input geometry values
-
+    # Load geometry
     if isinstance(lines, (str, Path)):
         segments = gpd.read_file(lines)
-    elif isinstance(lines, gpd.GeoDataFrame):
-        segments = lines
     else:
-        raise ValueError(
-            "'lines' must be a file path or GeoDataFrame."
-        )
+        segments = lines
 
     if isinstance(points, (str, Path)):
         nodes = gpd.read_file(points)
-    elif isinstance(points, gpd.GeoDataFrame):
-        nodes = points
     else:
-        raise ValueError(
-            "'points' must be a file path or GeoDataFrame."
-        )
-    
-    # Check if the given lookup table is directional or not
-    # NOTE: Maybe only accept the multi-directional segment lookup table in this case? (Simplifies iteration the most)
+        nodes = points
 
-    # For every connection pair, check if nodes and segments intersect correctly
+    # Match CRS
+    nodes = nodes.to_crs(segments.crs)
 
-        # select current segment geometry
+    # Pre-build lookup dictionaries
+    seg_geom = dict(zip(segments[line_id_field], segments.geometry))
+    node_geom = dict(zip(nodes[point_id_field], nodes.geometry))
 
-        # for each lookup node connection
+    errors_found = []
+    total_dist = 0
+    checks = 0
 
-            # select current node geometry
-            
-            # if node geometry exists:
-                
-                # if node is NOT intersecting with segment within threshold:
+    # Lookup table
+    for seg_id, node_ids in tqdm(lookup_table.items(), total=len(lookup_table)):
 
-                    # Add to errors dict with spatial error
+        seg = seg_geom.get(seg_id)
+        if seg is None:
+            errors_found.append({
+                "node_id": None,
+                "segment_id": seg_id,
+                "error_t": "missing segment",
+                "error_msg": f"segment {seg_id} does not exist in dataset",
+                "dist": -1
+            })
+            continue
 
-            # else:
+        # Check each node in this segment's connection set
+        for nid in node_ids:
 
-                # add to errors with invalid connection error
+            node = node_geom.get(nid)
+            if node is None:
+                errors_found.append({
+                    "node_id": nid,
+                    "segment_id": seg_id,
+                    "error_t": "missing node",
+                    "error_msg": f"node {nid} does not exist in dataset",
+                    "dist": -1
+                })
+                continue
 
-    errors_found = {}
+            # Compute distance
+            dist = node.distance(seg)
 
+            total_dist += dist
+            checks += 1
+
+            if dist > threshold:
+                errors_found.append({
+                    "node_id": nid,
+                    "segment_id": seg_id,
+                    "error_t": "spatial",
+                    "error_msg": f"node {nid} is more than {threshold} units from segment {seg_id}",
+                    "dist": dist
+                })
+
+    print(f"{len(errors_found)} Errors Found")
+    print(f"Average Distance {total_dist/checks} units")
     return errors_found
