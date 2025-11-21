@@ -4,8 +4,4 @@ out/*.gpkg
 *.qmd
 __pycache__
 sstrace_interactive.py
-full_sewers.geojson
-fitting_connections.geojson
 w_sstrace.py
-custom_outfalls.csv
-all_manholes.geojson
