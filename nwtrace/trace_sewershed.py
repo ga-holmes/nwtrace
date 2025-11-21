@@ -216,7 +216,7 @@ class NWTrace:
             print(f"Searching Network:")
 
         for o in tqdm(target_endpoints, disable=(not self.verbose)):
-            visited_list, edges_list = dfs_func(segment_lookup, node_lookup, o, set(), [], **dsf_kwargs)
+            visited_list, edges_list = dfs_func(segment_lookup, node_lookup, o, set(), set(), **dsf_kwargs)
             
             for e in edges_list:
                 all_connected.append({"segment_id": e, "exit_point": o})

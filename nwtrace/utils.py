@@ -2,7 +2,7 @@ from pathlib import Path
 import geopandas as gpd
 from tqdm import tqdm
 
-def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
+def dfs(segment_lookup, node_lookup, v, visited=None, edges=None):
     """
     Perform a depth-first search on an undirected graph.
 
@@ -25,7 +25,7 @@ def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
     visited : set, default empty set()
         A set of already visited node IDs. Updated in place during recursion.
 
-    edges : list, default []
+    edges : set, default []
         A list of segment IDs representing edges actually traversed.
         Updated in place during recursion.
 
@@ -37,6 +37,13 @@ def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
     edges : list
         The updated list of traversed segment IDs.
     """
+
+    # Set None values
+    if visited is None:
+        visited = set()
+    if edges is None:
+        edges = set()
+
     stack = [v]
     while stack:
 
@@ -58,10 +65,13 @@ def dfs(segment_lookup, node_lookup, v, visited=set(), edges=[]):
             for n in segment_lookup[e]:
                 if n != v:
                     w = n
+            
+            # Add any traversed edge
+            if e not in edges:
+                edges.add(e)
 
             # make sure not visited (in cyclical case)
             if w != None and w not in visited:
-                edges.append(e)
                 stack.append(w)
 
     return visited, edges
@@ -92,7 +102,7 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=None, edges=None, downs
         A set of already visited node IDs. Updated in place during recursion. Will set to an empty set if None
 
     edges : list, None
-        A list of segment IDs representing edges actually traversed. Will set to an empty array in None
+        A list of segment IDs representing edges actually traversed. Will set to an empty array if None
         Updated in place during recursion.
 
     downstream : bool, default False
@@ -111,7 +121,7 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=None, edges=None, downs
     if visited is None:
         visited = set()
     if edges is None:
-        edges = []
+        edges = set()
 
     stack = [v]
 
@@ -139,12 +149,15 @@ def dfs_directed(segment_lookup, node_lookup, v, visited=None, edges=None, downs
             seg = segment_lookup.get(e)
             if not seg:
                 continue
+            
+            # Add any edge that is traversed
+            if e not in edges:
+                edges.add(e)
 
             for w in seg[seg_dir]:
         
                 # make sure not visited (in cyclical case)
                 if w != None and w not in visited:
-                    edges.append(e)
                     stack.append(w)
 
     return visited, edges
@@ -202,9 +215,11 @@ def dfs_recursive(segment_lookup, node_lookup, v, visited=set(), edges=[]):
             if n != v:
                 w = n
 
+        if e not in edges:
+            edges.append(e)
+
         # make sure not visited (in cyclical case)
         if w != None and w not in visited:
-            edges.append(e)
             visited, edges = dfs_recursive(segment_lookup, node_lookup, w, visited, edges)
 
     return visited, edges
@@ -268,9 +283,11 @@ def dfs_directed_recursive(segment_lookup, node_lookup, v, visited=set(), edges=
 
         w = next_node(e)
 
+        if e not in edges:
+            edges.append(e)
+
         # make sure not visited (in cyclical case)
         if w != None and w not in visited:
-            edges.append(e)
             visited, edges = dfs_directed_recursive(segment_lookup, node_lookup, w, visited, edges, downstream=downstream)
 
     return visited, edges
