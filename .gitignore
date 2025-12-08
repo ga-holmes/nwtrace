@@ -5,3 +5,5 @@ out/*.gpkg
 __pycache__
 sstrace_interactive.py
 w_sstrace.py
+dem_test.py
+/dem
