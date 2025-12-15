@@ -57,7 +57,8 @@ class ASI:
 
         # initialize empty arrays for watershed and accumulation
         self.d8_accum = np.zeros_like(self.d8_dir)
-        self.d8_watershed = np.full_like(self.d8_dir,"", dtype=object) # array of objects that can be strings later
+        self.d8_watershed = np.zeros_like(self.d8_dir) # array of ints assigned sequentially, then realted to an ID table
+        self.watershed_table = dict()
 
         # create the outfall mask that indicates the locations of outfalls in the dataset
         self.outfall_mask = np.zeros_like(self.d8_dir)
@@ -99,8 +100,8 @@ class ASI:
                 
                 o_id = None
                 # check if it's an outfall, if yes, assign outfall ID
-                if self.outfall_mask[dn] == 1:
-                    o_id = self.outfall_locations[dn]
+                if self.outfall_mask[nr, nc] == 1:
+                    o_id = self.outfall_locations[(nr, nc)]
 
                 neighbours.append((nr, nc, o_id))
 
@@ -154,6 +155,13 @@ class ASI:
 
                 self.d8_accum[r, c] = self.d8_accum[r, c] + self.d8_accum[p, q] + 1
         
+        # if this is the first time ID is added, create new entry in table
+        if id not in self.watershed_table:
+            v = len(self.watershed_table)
+            self.watershed_table[id] = v
+        else:
+            v = self.watershed_table[id]
+
         # assign watershed value
-        self.d8_watershed[r, c] = id
+        self.d8_watershed[r, c] = v
 
