@@ -7,3 +7,5 @@ sstrace_interactive.py
 w_sstrace.py
 dem_test.py
 /dem
+/out_stats
+stats.ipynb

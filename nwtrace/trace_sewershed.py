@@ -40,9 +40,6 @@ class NWTrace:
             Set to True to print progress indicators, by default False
         """
 
-        # Set up paths, throws FileNotFoundError if issues occur
-        self.network_path = Path(network)
-        
         self.working_dir = Path(working_dir)
         Path(self.working_dir).mkdir(parents=True, exist_ok=True)
         
@@ -51,11 +48,13 @@ class NWTrace:
 
         self.verbose = verbose
 
-        if self.verbose: print(f"Loading network file: `{self.network_path}`...")
 
         # load file using pandas or assign
         if isinstance(network, (str, Path)):
-            self.network_main = gpd.read_file(network)
+            # Set up paths, throws FileNotFoundError if issues occur
+            self.network_path = Path(network)
+            if self.verbose: print(f"Loading network file: `{self.network_path}`...")
+            self.network_main = gpd.read_file(self.network_path)
         elif isinstance(network, gpd.GeoDataFrame):
             self.network_main = network
         else:

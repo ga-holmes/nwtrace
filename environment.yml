@@ -1,0 +1,13 @@
+name: myenv
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.13
+  - geopandas=1.1.1
+  - pandas=2.3.3
+  - tqdm=4.67.1
+  - rasterio
+  - ipykernel
+  - pip:
+      - whitebox
