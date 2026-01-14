@@ -9,3 +9,4 @@ dem_test.py
 /dem
 /out_stats
 stats.ipynb
+watershed_test.ipynb
