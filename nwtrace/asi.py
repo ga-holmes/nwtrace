@@ -9,14 +9,56 @@ class ASI:
 
     def __init__(
         self,
-        d8_flow_direction_raster,
-        inlet_connections,
-        outfall_locations,
-        inlet_locations,
-        watershed_type = "OUTFALL",
-        direction_map = None
+        d8_flow_direction_raster: str | Path | np.ndarray | rio.io.DatasetReader,
+        inlet_connections: dict,
+        outfall_locations: dict,
+        inlet_locations: dict,
+        watershed_type: str = "OUTFALL",
+        direction_map: dict = None
 
     ) -> None:
+        """
+        Initializes a new ASI instance that can be used to perform flow accumulation via the 'Adaptive Stormwater Infrastructure' algorithm presented in Choi et al. (2011)
+
+        Parameters
+        ----------
+        d8_flow_direction_raster : str | Path | np.ndarray | rio.io.DatasetReader
+            A raster that is encoded with d8 flow direction values corresponding to 'direction_map' (whiteboxtools mapping by default, defined in function). May be a filepath.
+        inlet_connections : dict
+            A dictionary of the form { OF_ID: [INLET_ID, ...] } representing which inlets each outfall is connected to
+        outfall_locations : dict
+            A dictionary of the form { (row, column): OF_ID } representing the location of each outfall in the provided d8_flow_direction raster
+        inlet_locations : dict
+            A dictionary of the form { INLET_ID: (row, column) } representing the location of each inlet in the provided d8_flow_direction raster
+        watershed_type : str, optional
+            Defines how to assign watershed classes. 
+            Options: 
+                - OUTFALL (Give each outfall a catchment), 
+                - OUTLET (catchments for seed cells/edges only), 
+                - INLET (Give each Inlet a catchment). 
+            by default "OUTFALL"
+        direction_map : dict, optional
+            A dictionary that maps values to 'directions' that a cell can be pointing towards. 
+            If none, whiteboxtools directions will be used (defined in function)
+            Of the form:
+                {
+                    int:   (0,0),   # Sink
+                    int:   (-1,1),  # NE
+                    int:   (0,1),   # E
+                    int:   (1,1),   # SE
+                    int:   (1,0),   # S
+                    int:  (1,-1),   # SW
+                    int:  (0,-1),   # W
+                    int:  (-1,-1),  # NW
+                    int: (-1,0)     # N
+                } 
+            , by default None
+
+        Raises
+        ------
+        ValueError
+            If the d8_flow_direction_raster is not a correct type and cannot be converted to a numpy array.
+        """
 
         # load d8 file using rasterio or assign
         if isinstance(d8_flow_direction_raster, (str, Path)):
@@ -68,7 +110,22 @@ class ASI:
         
 
     # Returns cell coordinates for cells that drain into (x, y) of the D8 flow direction raster
-    def get_d8_neighbours(self, r, c) -> list:
+    def _get_d8_neighbours(self, r: int, c: int) -> list:
+        """
+        Given an input cell in self.d8_dir, finds all surrounding cells that flow into [r, c]
+
+        Parameters
+        ----------
+        r : int
+            The row of the target cell in self.d8_dir
+        c : int
+            The column of the target cell in self.d8_dir
+
+        Returns
+        -------
+        list
+            A list of cells that flow into self.d8_dir[r, c]
+        """
 
         # List of tuples
         neighbours = []
@@ -107,7 +164,23 @@ class ASI:
 
         return neighbours
 
-    def get_seed_cells(self, d8_dir, to_exclude = None):
+    def get_seed_cells(self, d8_dir, to_exclude = None) -> list:
+        """
+        Compares all sinks in d8_dir to inlet locations (or the contents of to_exclude) 
+        and excludes inlets from seed cells.
+
+        Parameters
+        ----------
+        d8_dir : _type_
+            _description_
+        to_exclude : _type_, optional
+            _description_, by default None
+
+        Returns
+        -------
+        list
+            A list of seed cells that can be iterated through and used for interative_asi() to calculate flow accumulation and watersheds.
+        """
         
         if to_exclude is not None:
             sink_mask = (d8_dir == 0) & (~to_exclude)
@@ -120,7 +193,26 @@ class ASI:
 
 
     def recursive_asi(self, r: int, c: int, id: str, o_id: str = None):
-        # x and y are the locations of 'seed' cells from which to initiate the recursive process
+        """
+        Recursively trace from accumulation from the given seed cell, 
+        referencing Outfall-Inlet connections and filling in self.watershed 
+        to indicate catchments based on self.watershed_type. 
+        
+        May run into RecursionError for moderate-large datasets. iterative_asi() is preferred for all use cases.
+
+        Parameters
+        ----------
+        r : int
+            Location of the row of the cell to start at.
+        c : int
+            Location of the row of the cell to start at.
+        id : str
+            The ID of the seed cell, will be propagated depending on self.watershed_type (Default "OUTFALL")
+        o_id : str, optional
+            If withing the context of cells draining to an outfall, indicates the ID of the outall and propagates it. 
+            Set within the function, by default None. ONLY USE IF THE SEED CELL IS AN OUTFALL (end of flow)
+        """
+        # r and c are the locations of 'seed' cells from which to initiate the recursive process
         # These are edge cells, or inlets with the 'undefined' indicator
         # Each seed cell will need to have a unique ID
 
@@ -128,15 +220,15 @@ class ASI:
         # The DEM will need to be modified to create intentional sinks at the locations of inlets
         # These sinks will then be given an indicator for use in the procedure
 
-        # for every neighbour of (x,y)
-        for (i,j, o_id) in self.get_d8_neighbours(r, c):
+        # for every neighbour of (r,c)
+        for (i,j, o_id) in self._get_d8_neighbours(r, c):
             # call this function on the current cell, id is propagated for assigning the watershed
             self.recursive_asi(i,j,id,o_id)
 
-            # at the inlet cell, set to the current value plus the accumulated flow to cell (i,j) - +1 for the flow to this cell
+            # at the cell, set to the current value plus the accumulated flow to cell (i,j) - +1 for the flow to this cell
             self.d8_accum[r, c] = self.d8_accum[r, c] + self.d8_accum[i, j] + 1
 
-        # If cell (x,y) is an outfall:
+        # If cell (r,c) is an outfall:
         if o_id is not None:
             for i_id in self.inlet_connections[o_id]:
 
@@ -165,3 +257,111 @@ class ASI:
         # assign watershed value
         self.d8_watershed[r, c] = v
 
+    def iterative_asi(self, r0: int, c0: int, id: str, o_id: str = None):
+        """
+        Iteratively trace from accumulation from the given seed cell, 
+        referencing Outfall-Inlet connections and filling in self.watershed 
+        to indicate catchments based on self.watershed_type
+
+        Parameters
+        ----------
+        r0 : int
+            Location of the row of the cell to start at.
+        c0 : int
+            Location of the row of the cell to start at.
+        id : str
+            The ID of the seed cell, will be propagated depending on self.watershed_type (Default "OUTFALL")
+        o_id : str, optional
+            If withing the context of cells draining to an outfall, indicates the ID of the outall and propagates it. 
+            Set within the function, by default None. ONLY USE IF THE SEED CELL IS AN OUTFALL (end of flow)
+        """
+
+        # This is called for each seed cell
+        # r and c are the locations of 'seed' cells from which to initiate the recursive process
+        # These are edge cells, or inlets with the 'undefined' indicator
+        # Each seed cell will need to have a unique ID
+
+        # ------------------------
+        # The DEM will need to be modified to create intentional sinks at the locations of inlets
+        # These sinks will then be given an indicator for use in the procedure
+
+        # Instead of recursion, the operations are handled with a stack that acceprts arguments similarly to the function
+        # Stack arguments: (row, column, watershed_id, outfall_id: may be none, ORDER (PRE=0, POST=1))
+        # 'ORDER' is used to represent whether, for each cell visit, we should find children (i.e. get neighbours), or accumulate flow (flow cannot accumulate until we've reached the 'top' of the DEM)
+
+        PRE = 0
+        POST = 1
+        
+        nrows, ncols = self.d8_dir.shape
+        visited = np.zeros((nrows,ncols), dtype=bool)
+        
+        stack = []
+        # top of stack
+        stack.append((r0, c0, id, o_id, PRE))
+        
+        while stack:
+            r, c, id, o_id, phase = stack.pop()
+            
+            # pre visit
+            if phase == PRE:
+                
+                # check if in visited
+                if visited[r, c]:
+                    continue
+                
+                visited[r,c] = True
+                
+                # push POST phase for next iteration
+                stack.append((r, c, id, o_id, POST))
+                
+                # for every neighbour of (r,c)
+                for (i,j, c_o_id) in self._get_d8_neighbours(r, c):    
+                    # Append only if not visited
+                    if not visited[i,j]:
+                        stack.append((i, j, id, c_o_id, PRE))
+
+                # If cell (r,c) is an outfall:
+                if o_id is not None:
+                    for i_id in self.inlet_connections[o_id]:
+
+                        p, q = self.inlet_locations[i_id]
+
+                        # placeholder for a potentially better system later
+                        match self.watershed_type:
+                            case "OUTLET":
+                                w_id = id
+                            case "OUTFALL":
+                                w_id = o_id
+                            case "INLET":
+                                w_id = i_id
+
+                        # Push new inlet cell to stack including new watershed id (based on above)
+                        if not visited[p,q]:
+                            stack.append((p, q, w_id, None, PRE))
+                
+            # post visit
+            else:
+                
+                # normal cell flow
+                for ( i, j, _) in self._get_d8_neighbours(r, c):
+                    if visited[i,j]:
+                        self.d8_accum[r,c] += self.d8_accum[i,j] + 1
+                
+                # outfall-inlet flow
+                if o_id is not None:
+                    for i_id in self.inlet_connections[o_id]:
+                        p, q = self.inlet_locations[i_id]
+                        
+                        if visited[p,q]:
+                            self.d8_accum[r,c] += self.d8_accum[p,q] + 1
+                                
+                # if this is the first time ID is added, create new entry in table
+                if id not in self.watershed_table:
+                    v = len(self.watershed_table)
+                    self.watershed_table[id] = v
+                else:
+                    v = self.watershed_table[id]
+
+                # assign watershed value
+                self.d8_watershed[r, c] = v
+    
