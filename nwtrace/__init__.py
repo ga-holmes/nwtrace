@@ -9,6 +9,6 @@ from .utils import (
 )
 
 # Define the __all__ variable
-__all__ = [NWTrace, ASI, utils]
+__all__ = ['NWTrace', 'ASI', 'utils']
 
 version = "0.0.1"

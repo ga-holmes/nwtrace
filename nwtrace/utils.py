@@ -1,5 +1,6 @@
 from pathlib import Path
 import geopandas as gpd
+import pandas as pd
 from tqdm import tqdm
 
 def dfs(segment_lookup, node_lookup, v, visited=None, edges=None):
@@ -293,6 +294,51 @@ def dfs_directed_recursive(segment_lookup, node_lookup, v, visited=set(), edges=
     return visited, edges
 
 
+def count_duplicates(
+    elements: str | Path | pd.DataFrame | gpd.GeoDataFrame,
+    id_field: str,
+    minimum_count: int=1
+) -> dict:
+    """
+    Given a GeoDataFrame or a path to a vector geometry file, will return a dictionary countaining 
+    a count of how many times each value in the 'id_field' column appears more than 'minimum_count' times.
+
+    Parameters
+    ----------
+    elements : str | Path | pd.DataFrame | gpd.GeoDataFrame
+        A DataFrame or GeoDataFrame, or the path to one, that contains at least one column corresponding to 'id_field'
+    id_field : str
+        The name of the column in the DataFrame to count duplicates in
+    minimum_count : int, optional
+        The minimum number of appearances for the item to be added to the output dictionary, by default 1
+
+    Returns
+    -------
+    dict
+        A dictionary containing the contents of the 'id_field' column in the 'elements' DataFrame, 
+        with a corresponding count for how many times that value appears.
+    """
+    
+    # Verify input geometry values
+    # Load geometry
+    if isinstance(elements, (str, Path)):
+        elements = gpd.read_file(elements )
+    elif isinstance(elements, (pd.DataFrame, gpd.GeoDataFrame)):
+        elements = elements
+    else:
+        raise ValueError(
+            "'elements' must be a path to a file that can be opened by GeoPandas or Pandas, or a DataFrame or GeoDataFrame."
+        )
+    
+    ids = elements[[id_field, "geometry"]]
+
+    ids_dup = ids.groupby([id_field]).count()
+    ids_dup = ids_dup[ids_dup["geometry"] > minimum_count]
+    ids_dup = ids_dup.rename(columns={"geometry": "duplicate_count"})
+
+    return ids_dup.to_dict()
+    
+
 def verify_network_geometry(
         lines: str | Path | gpd.GeoDataFrame,
         points: str | Path | gpd.GeoDataFrame,
@@ -311,7 +357,7 @@ def verify_network_geometry(
     points : str | Path | gpd.GeoDataFrame
         Geometry or a filepath to the geometry that corresponds to the nodes in the network
     lookup_table : dict
-        Lookup table for node connections, may be directional or non-direcitonal NOTE: For now only accepts the multi-directional segment lookup table
+        Lookup table for segment > node connections, may be directional or non-direcitonal NOTE: For now only accepts the multi-directional segment lookup table
     line_id_field : str
         The name of the field in the 'lines' dataset that contains the ID that corresponds to the lookup table
     point_id_field : str
@@ -358,7 +404,8 @@ def verify_network_geometry(
                 "segment_id": seg_id,
                 "error_t": "missing segment",
                 "error_msg": f"segment {seg_id} does not exist in dataset",
-                "dist": -1
+                "dist": -1,
+                "geometry": seg
             })
             continue
 
@@ -372,7 +419,8 @@ def verify_network_geometry(
                     "segment_id": seg_id,
                     "error_t": "missing node",
                     "error_msg": f"node {nid} does not exist in dataset",
-                    "dist": -1
+                    "dist": -1,
+                    "geometry": seg
                 })
                 continue
 
@@ -388,7 +436,8 @@ def verify_network_geometry(
                     "segment_id": seg_id,
                     "error_t": "spatial",
                     "error_msg": f"node {nid} is more than {threshold} units from segment {seg_id}",
-                    "dist": dist
+                    "dist": dist,
+                    "geometry": seg
                 })
 
     print(f"{len(errors_found)} Errors Found")
