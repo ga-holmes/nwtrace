@@ -2,6 +2,7 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 from tqdm import tqdm
+from shapely.geometry import LineString, MultiLineString, Point
 
 def dfs(segment_lookup, node_lookup, v, visited=None, edges=None):
     """
@@ -293,6 +294,71 @@ def dfs_directed_recursive(segment_lookup, node_lookup, v, visited=set(), edges=
 
     return visited, edges
 
+def extract_endpoints(line: LineString | MultiLineString) -> list:
+    """
+    Given a Shapely LineString or MultiLineString, returns a list containing all/both endpoints
+
+    Parameters
+    ----------
+    line : LineString | MultiLineString
+        The target line/segment geometry
+
+    Returns
+    -------
+    list
+        A list containing all endpoints in the geometry
+    """
+    
+    if line is None or line.is_empty:
+        return []
+
+    if isinstance(line, LineString):
+        coords = line.coords
+        return [Point(coords[0]), Point(coords[-1])]
+
+    if isinstance(line, MultiLineString):
+        return [
+            Point(line.geoms[0].coords[0]),
+            Point(line.geoms[-1].coords[-1])
+        ]
+
+    return []
+
+def find_nearest_node(
+    line: gpd.GeoSeries,
+    points: str | Path | gpd.GeoDataFrame,
+    id_field: str,
+    threshold: int = 1
+):
+    
+    endpoints = extract_endpoints(line.geometry)
+    
+    records = []
+    for role, pt in zip(("from", "to"), endpoints):
+        records.append({
+            "segment_id": line[id_field],
+            "role": role,
+            "geometry": pt
+        })
+        
+    endpoints_gdf = gpd.GeoDataFrame(
+        records,
+        geometry="geometry",
+        crs=line.crs
+    )
+
+    endpoints_gdf["geom_buffer"] = endpoints_gdf.buffer(1)
+
+    seg_bufs = gpd.GeoDataFrame(
+        endpoints_gdf[["segment_id", "role", "geom_buffer", "geometry"]],
+        geometry="geom_buffer",
+        crs=endpoints_gdf.crs
+    ).rename(columns={"geometry":"endpoint"})
+
+    nearby_nodes = gpd.sjoin(points, seg_bufs, predicate="intersects", how="inner")
+    
+    return nearby_nodes
+    
 
 def count_duplicates(
     elements: str | Path | pd.DataFrame | gpd.GeoDataFrame,
@@ -342,7 +408,7 @@ def count_duplicates(
 def verify_network_geometry(
         lines: str | Path | gpd.GeoDataFrame,
         points: str | Path | gpd.GeoDataFrame,
-        lookup_table: dict,
+        segment_lookup: dict,
         line_id_field: str,
         point_id_field: str,
         threshold: int = 0
@@ -356,7 +422,7 @@ def verify_network_geometry(
         Geometry or a filepath to the geometry that corresponds to the segments in the network
     points : str | Path | gpd.GeoDataFrame
         Geometry or a filepath to the geometry that corresponds to the nodes in the network
-    lookup_table : dict
+    segment_lookup : dict
         Lookup table for segment > node connections, may be directional or non-direcitonal NOTE: For now only accepts the multi-directional segment lookup table
     line_id_field : str
         The name of the field in the 'lines' dataset that contains the ID that corresponds to the lookup table
@@ -395,7 +461,7 @@ def verify_network_geometry(
     checks = 0
 
     # Lookup table
-    for seg_id, node_ids in tqdm(lookup_table.items(), total=len(lookup_table)):
+    for seg_id, node_ids in tqdm(segment_lookup.items(), total=len(segment_lookup)):
 
         seg = seg_geom.get(seg_id)
         if seg is None:
@@ -443,3 +509,103 @@ def verify_network_geometry(
     print(f"{len(errors_found)} Errors Found")
     print(f"Average Distance {total_dist/checks} units")
     return errors_found
+
+def repair_network(
+    errors: list,
+    lines: str | Path | gpd.GeoDataFrame,
+    points: str | Path | gpd.GeoDataFrame,
+    segment_lookup: dict,
+    node_lookup: dict,
+    line_id_field: str,
+    point_id_field: str,
+    distance_threshold: int = 0
+) -> tuple[dict, dict]:
+    """
+    Given network geometry and an error table output by 'utils.verify_network_geometry()', repairs the given lookup tables based on a set of rules and the given geometry.
+    NOTE: Does not alter geometry or save to any files, on adjusts the lookup tables by creating new connections where necessary.
+    NOTE: ^ Maybe this is necessary to fix missing node/segment connections? The connections already exist in the table after all...
+
+    Parameters
+    ----------
+    errors : list
+        A list containing errors and info output by 'utils.verify_network_geometry()'
+    lines : str | Path | gpd.GeoDataFrame
+        Geometry or a filepath to the geometry that corresponds to the segments in the network
+    points : str | Path | gpd.GeoDataFrame
+        Geometry or a filepath to the geometry that corresponds to the nodes in the network
+    segment_lookup : dict
+        Lookup table for segment > node connections that will be repaired, 
+        may be directional or non-direcitonal NOTE: For now only accepts the multi-directional segment lookup table
+    node_lookup : dict
+        Lookup table for node > segment connections that will be repaired, 
+        may be directional or non-direcitonal NOTE: For now only accepts the multi-directional segment lookup table
+    line_id_field : str
+        The name of the field in the 'lines' dataset that contains the ID that corresponds to the lookup table
+    point_id_field : str
+        The name of the field in the 'points' dataset that contains the ID that corresponds to the lookup table
+    distance_threshold : int, optional
+        minimum distance to repair a spatial error connection (unit is CRS-dependent based on the CRS for the input file), by default 0
+
+    Returns
+    -------
+    dir_node_lookup, dir_segment_lookup: tuple[dict, dict]
+        The respective repaired lookup tables for nodes and segments
+    """
+        
+    # Verify input geometry values
+    # Load geometry
+    if isinstance(lines, (str, Path)):
+        segments = gpd.read_file(lines)
+    else:
+        segments = lines
+
+    if isinstance(points, (str, Path)):
+        nodes = gpd.read_file(points)
+    else:
+        nodes = points
+
+    # Match CRS
+    nodes = nodes.to_crs(segments.crs)
+    
+    # Get all spatial error segments
+    spatial_err_segs = [err["segment_id"] for err in errors if err.get("error_t") == "spatial"]
+    segments = lines.loc[lines["FACILITYID"].isin(spatial_err_segs)].squeeze()
+    
+    segment_bufs = segments.buffer(distance_threshold)
+    
+    # Error handling:
+    for err in errors:
+        
+        s_id = err["segment_id"]
+        
+        # Remove missing item errors (Maybe not necessary for table-only fixes? Only need these to repair actual geometry dataset)
+        if err["error_t"] == "missing node" or err["error_t"] == "missing segment":
+            continue
+
+            # Remove errors where node_id and seg_id appear only once
+            
+            # Where node_id appears more than once, create additional node conneciton based on the necessary ID
+            
+            # above but for segments(?)
+        
+        # Repair misapplied connections
+        else:
+            
+            segment = lines.loc[lines[line_id_field] == s_id].squeeze()
+            seg_buf = segment.buffer(distance_threshold)
+            
+            nearby_nodes = gpd.sjoin(points, seg_buf, predicate="intersects")
+                # Find nearest node in-data that is not connected already to the segment
+                    # How to do this without massive search time? Would need to check the distance of every node in the dataset
+                    
+                    # Buffer by threshold -> return list of nodes
+                    
+                    # For each node, calculate distance
+                    
+                        # Ignore if already connected
+                
+                # Need a way to make sure that the nearest node isn't a nearby connection that is not actually connected (only connect within threshold distance from endpoint)
+                
+                # Set the incorrect node_id to the correct node_id
+    
+    return node_lookup, segment_lookup
