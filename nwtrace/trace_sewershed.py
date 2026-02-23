@@ -366,6 +366,7 @@ class NWTrace:
         """
 
         return self.dir_node_lookup, self.dir_segment_lookup
+    
         
             
 

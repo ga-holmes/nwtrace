@@ -688,3 +688,73 @@ def repair_network(
                 # Set the incorrect node_id to the correct node_id
     
     return node_lookup, segment_lookup
+
+def network_from_geometry(
+    lines: str | Path | gpd.GeoDataFrame,
+    points: str | Path | gpd.GeoDataFrame,
+    line_id_field: str,
+    upstream_field: str, 
+    downstream_field: str,
+    distance_threshold: int = 1
+) -> gpd.GeoDataFrame:
+    # Create to/from node connection entries in the given line/segment vector dataset based on appropriate point/nodes in the respective dataset
+
+    # Verify input geometry values
+    # Load geometry
+    if isinstance(lines, (str, Path)):
+        segments = gpd.read_file(lines)
+    else:
+        segments = lines
+
+    if isinstance(points, (str, Path)):
+        nodes = gpd.read_file(points)
+    else:
+        nodes = points
+
+    # get nearby nodes
+    nearby_nodes = find_nearby_nodes(
+        segments,
+        nodes,
+        line_id_field,
+        distance_threshold
+    )
+
+    # NOTE: Function here to rule out certain nodes, also need to decide which ones are the upstream
+    # In 'repair_spatial_errors()', a function is defined to  ignore nodes that are already connected in the table,
+    # could just define a different function here that performs additional checks.
+
+    # if [elevation fields] not null
+        # upstream = high elevation
+        # downstream = low elevation
+    # else
+        # use segment direction
+
+    # get only proposed node-segment connectioned with the minimum distance
+    idx = (
+        nearby_nodes
+        .groupby(["segment_id", "role"])["dist"]
+        .idxmin()
+    )
+
+    # get a subset of nearby nodes containing only the potential connections witht the closest endpoint-node distance
+    best_candidates = nearby_nodes.loc[idx].drop_duplicates()[["FACILITYID", "segment_id", "role"]]
+
+    best_candidates = best_candidates.pivot(
+        index="segment_id",
+        columns="role",
+        values=line_id_field
+    )
+
+    best_candidates = best_candidates.rename(
+        columns={
+            "from": upstream_field,
+            "to": downstream_field
+        }
+    )
+    
+    lines_gdf_indexed = lines.set_index(line_id_field, drop=False)
+
+    # NOTE: All of the above may be able to stay the same, however 'update' might not work where the fields dont already exist?
+    lines_gdf_indexed.update(best_candidates)
+    
+    return lines_gdf_indexed
