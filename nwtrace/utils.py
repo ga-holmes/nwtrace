@@ -521,10 +521,43 @@ def find_nearby_nodes(
     
     return nearby_nodes
 
+def find_nearby_segments(
+    nodes: str | Path | gpd.GeoDataFrame,
+    segments: str | Path | gpd.GeoDataFrame,
+    node_id_field: str,
+    distance_threshold: int = 1,
+) -> gpd.GeoDataFrame:
+    
+    nodes_copy = gpd.GeoDataFrame(
+        nodes,
+        geometry="geometry",
+        crs=nodes.crs
+    )
+    # Add a field with buffer geometry to each endpoint
+    nodes_copy["geom_buffer"] = nodes.buffer(distance_threshold)
+
+    # create a flipped geodataframe where the main geometry is the buffer and the secondary geometry is the location of the node
+    node_bufs = gpd.GeoDataFrame(
+        nodes_copy[[node_id_field, "geom_buffer", "geometry"]],
+        geometry="geom_buffer",
+        crs=nodes.crs
+    ).rename(columns={node_id_field: "node_id", "geometry":"location"})
+
+    # join nodes from the node dataset that fall within the buffer for each endpoint with the buffers dataset
+    # This makes a geodataframe where each node (that is within a buffer) has information about nearby segment endpoints within the buffer
+    nearby_segs = gpd.sjoin(segments, node_bufs, predicate="intersects", how="inner")
+
+    # calculate distance from each node to the respective node
+    nearby_segs["dist"] = nearby_segs.geometry.distance(
+        nearby_segs["location"]
+    )
+    
+    return nearby_segs
+
 def repair_spatial_errors(
     errors: list,
-    lines: str | Path | gpd.GeoDataFrame,
-    points: str | Path | gpd.GeoDataFrame,
+    segments: str | Path | gpd.GeoDataFrame,
+    nodes: str | Path | gpd.GeoDataFrame,
     line_id_field: str,
     upstream_field: str, 
     downstream_field: str,
@@ -535,14 +568,14 @@ def repair_spatial_errors(
     spatial_err_segs = [err["segment_id"] for err in errors if err.get("error_t") == "spatial"]
 
     # Select segments from the lines dataset that appear in the list of spatial errors
-    segs = lines.loc[lines[line_id_field].isin(spatial_err_segs)]
+    err_segs = segments.loc[segments[line_id_field].isin(spatial_err_segs)]
 
     # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
-    nearby_nodes = find_nearby_nodes(segs, points, line_id_field, distance_threshold=distance_threshold)
+    nearby_nodes = find_nearby_nodes(err_segs, nodes, line_id_field, distance_threshold=distance_threshold)
     
     # Allow easy searching of lines dataset for connecting nodes
-    current_from = lines.set_index(line_id_field)[upstream_field]
-    current_to = lines.set_index(line_id_field)[downstream_field]
+    current_from = segments.set_index(line_id_field)[upstream_field]
+    current_to = segments.set_index(line_id_field)[downstream_field]
     
     # returns true when a row from 'nearby_nodes' is not connected to the associated segment in the lookup table
     def not_already_connected(row):
@@ -583,11 +616,68 @@ def repair_spatial_errors(
         }
     )
     
-    lines_gdf_indexed = lines.set_index(line_id_field, drop=False)
-    lines_gdf_indexed.update(best_candidates)
+    segments_fixed = segments.set_index(line_id_field, drop=False)
+    segments_fixed.update(best_candidates)
     
-    return lines_gdf_indexed
+    return segments_fixed
     
+def repair_node_connections(
+    errors: list,
+    nodes: str | Path | gpd.GeoDataFrame,
+    segments: str | Path | gpd.GeoDataFrame,
+    node_id_field: str,
+    node_connection_field: str,
+    segment_id_field: str,
+    upstream_field: str, 
+    downstream_field: str,
+    distance_threshold: int = 1
+) -> tuple[dict, dict]:
+
+    # Extract spatial errors from the error list
+    spatial_err_nodes = [err["node_id"] for err in errors if err.get("error_t") == "spatial"]
+
+    # Select segments from the lines dataset that appear in the list of spatial errors
+    err_nodes = nodes.loc[nodes[node_id_field].isin(spatial_err_nodes)]
+
+    # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
+    nearby_segs = find_nearby_segments(err_nodes, segments, node_id_field, distance_threshold=distance_threshold)
+
+        # returns true when a row from 'nearby_nodes' is not connected to the associated segment in the lookup table
+    def not_already_connected(row):
+        node = row["node_id"]
+        ups = row[upstream_field]
+        dwns= row[downstream_field]
+        
+        if ups == node or dwns == node:
+            return False
+        else:
+            return True
+        
+    # apply the above funtion to nearby nodes (extaract all nodes that arent connected to segments in the lookup table)
+    nearby_segs = nearby_segs[
+        nearby_segs.apply(not_already_connected, axis=1)
+    ]
+
+    # get only proposed node-segment connectioned with the minimum distance
+    idx = (
+        nearby_segs
+        .groupby(["node_id"])["dist"]
+        .idxmin()
+    )
+
+    # get a subset of nearby nodes containing only the potential connections witht the closest endpoint-node distance
+    best_candidates = nearby_segs.loc[idx].drop_duplicates()[[segment_id_field, "node_id"]]
+
+    best_candidates = best_candidates.rename(
+        columns={
+            segment_id_field: node_connection_field,
+        }
+    ).set_index("node_id")
+
+    nodes_fixed = nodes.set_index(node_id_field, drop=False)
+    nodes_fixed.update(best_candidates)
+
+    return nodes_fixed
 
 def repair_network(
     errors: list,
