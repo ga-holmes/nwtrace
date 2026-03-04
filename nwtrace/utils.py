@@ -475,20 +475,20 @@ def verify_network_geometry(
     return errors_found
 
 def find_nearby_nodes(
-    lines: str | Path | gpd.GeoDataFrame,
-    points: str | Path | gpd.GeoDataFrame,
-    line_id_field: str,
+    segments: str | Path | gpd.GeoDataFrame,
+    nodes: str | Path | gpd.GeoDataFrame,
+    segment_id_field: str,
     distance_threshold: int = 1,
 ) -> gpd.GeoDataFrame:
     
     records = []
-    for _, line in lines.iterrows():
+    for _, line in segments.iterrows():
 
         endpoints = extract_endpoints(line.geometry)
         
         for role, pt in zip(("from", "to"), endpoints):
             records.append({
-                "segment_id": line[line_id_field],
+                "segment_id": line[segment_id_field],
                 "role": role,
                 "geometry": pt
             })
@@ -497,7 +497,7 @@ def find_nearby_nodes(
     endpoints_gdf = gpd.GeoDataFrame(
         records,
         geometry="geometry",
-        crs=lines.crs
+        crs=segments.crs
     )
 
     # Add a field with buffer geometry to each endpoint
@@ -512,7 +512,7 @@ def find_nearby_nodes(
 
     # join nodes from the node dataset that fall within the buffer for each endpoint with the buffers dataset
     # This makes a geodataframe where each node (that is within a buffer) has information about nearby segment endpoints within the buffer
-    nearby_nodes = gpd.sjoin(points, seg_bufs, predicate="intersects", how="inner")
+    nearby_nodes = gpd.sjoin(nodes, seg_bufs, predicate="intersects", how="inner")
 
     # calculate distance from each node to the respective endpoint
     nearby_nodes["dist"] = nearby_nodes.geometry.distance(
@@ -543,7 +543,6 @@ def find_nearby_segments(
         crs=nodes.crs
     ).rename(columns={node_id_field: "node_id", "geometry":"location"})
 
-    # join nodes from the node dataset that fall within the buffer for each endpoint with the buffers dataset
     # This makes a geodataframe where each node (that is within a buffer) has information about nearby segment endpoints within the buffer
     nearby_segs = gpd.sjoin(segments, node_bufs, predicate="intersects", how="inner")
 
@@ -779,72 +778,95 @@ def repair_network(
     
     return node_lookup, segment_lookup
 
+# NOTE: add verbose mode?
 def network_from_geometry(
-    lines: str | Path | gpd.GeoDataFrame,
-    points: str | Path | gpd.GeoDataFrame,
-    line_id_field: str,
-    upstream_field: str, 
-    downstream_field: str,
+    segments: str | Path | gpd.GeoDataFrame,
+    nodes: str | Path | gpd.GeoDataFrame,
+    segment_id_field: str,
+    node_id_field: str,
     distance_threshold: int = 1
 ) -> gpd.GeoDataFrame:
     # Create to/from node connection entries in the given line/segment vector dataset based on appropriate point/nodes in the respective dataset
 
     # Verify input geometry values
     # Load geometry
-    if isinstance(lines, (str, Path)):
-        segments = gpd.read_file(lines)
+    if isinstance(segments, (str, Path)):
+        segs_gdf = gpd.read_file(segments)
     else:
-        segments = lines
+        segs_gdf = segments
 
-    if isinstance(points, (str, Path)):
-        nodes = gpd.read_file(points)
+    if isinstance(nodes, (str, Path)):
+        nodes_gdf = gpd.read_file(nodes)
     else:
-        nodes = points
+        nodes_gdf = nodes
 
     # get nearby nodes
     nearby_nodes = find_nearby_nodes(
-        segments,
-        nodes,
-        line_id_field,
+        segs_gdf,
+        nodes_gdf,
+        segment_id_field,
         distance_threshold
     )
 
-    # NOTE: Function here to rule out certain nodes, also need to decide which ones are the upstream
-    # In 'repair_spatial_errors()', a function is defined to  ignore nodes that are already connected in the table,
-    # could just define a different function here that performs additional checks.
-
-    # if [elevation fields] not null
-        # upstream = high elevation
-        # downstream = low elevation
-    # else
-        # use segment direction
-
     # get only proposed node-segment connectioned with the minimum distance
-    idx = (
+    best_candidates = (
         nearby_nodes
-        .groupby(["segment_id", "role"])["dist"]
-        .idxmin()
+        .sort_values("dist")
+        .groupby(["segment_id", "role"], as_index=False)
+        .head(1)
     )
 
-    # get a subset of nearby nodes containing only the potential connections witht the closest endpoint-node distance
-    best_candidates = nearby_nodes.loc[idx].drop_duplicates()[["FACILITYID", "segment_id", "role"]]
+    # get distances for verification
+    distances = best_candidates.pivot(index="segment_id", columns="role", values="dist")
 
     best_candidates = best_candidates.pivot(
         index="segment_id",
         columns="role",
-        values=line_id_field
+        values=node_id_field
     )
 
-    best_candidates = best_candidates.rename(
-        columns={
-            "from": upstream_field,
-            "to": downstream_field
-        }
-    )
+    best_candidates = best_candidates.join(distances, lsuffix="", rsuffix="_dist").reset_index().rename(columns={"segment_id": segment_id_field})
     
-    lines_gdf_indexed = lines.set_index(line_id_field, drop=False)
+    return best_candidates
 
-    # NOTE: All of the above may be able to stay the same, however 'update' might not work where the fields dont already exist?
-    lines_gdf_indexed.update(best_candidates)
-    
-    return lines_gdf_indexed
+def verify_flow_directionality(
+    segments: str | Path | gpd.GeoDataFrame,
+    nodes: str | Path | gpd.GeoDataFrame,
+    segment_id_field: str,
+    elevation_field: str,
+    upstream_field: str = "from",
+    downstream_field: str = "to",
+    repair_errors: bool = True
+):
+    nodes_idx = nodes.set_index(segment_id_field)
+
+    records = []
+
+    # map elevation from nodes dataset
+    segments["from_height"] = segments[upstream_field].map(nodes_idx[elevation_field])
+    segments["to_height"]   = segments[downstream_field].map(nodes_idx[elevation_field])
+
+    # Filter out invalid rows before looping
+    valid = segments.dropna(subset=[upstream_field, downstream_field, "from_height", "to_height"])
+
+    records = []
+    for seg_id, seg in valid.iterrows():
+        if seg["to_height"] > seg["from_height"]:
+            records.append({
+                segment_id_field: seg_id,
+                upstream_field: seg[downstream_field],
+                downstream_field: seg[upstream_field],
+                "from_height": seg.get("to_height"),
+                "to_height": seg.get("from_height"),
+                "from_dist": seg.get("to_dist"),
+                "to_dist": seg.get("from_dist")
+            })
+
+    # NOTE: repair here? or no? option?
+    if repair_errors:
+        repaired_errs = pd.DataFrame(records).set_index(segment_id_field)
+        network = segments.copy(deep=True)
+        network.update(repaired_errs)
+
+        # NOTE: either return here, or return error count no matter what, and allow the funciton to alter 'segments' explicitly
+        return network
