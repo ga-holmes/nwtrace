@@ -533,7 +533,7 @@ def find_nearby_segments(
         geometry="geometry",
         crs=nodes.crs
     )
-    # Add a field with buffer geometry to each endpoint
+    # Add a field with buffer geometry to each node 
     nodes_copy["geom_buffer"] = nodes.buffer(distance_threshold)
 
     # create a flipped geodataframe where the main geometry is the buffer and the secondary geometry is the location of the node
