@@ -295,12 +295,12 @@ class NWTrace:
             Field identifier for the connecting segment, by default "segment_id"
         """
 
-        # Check for correct structure of 'new_nodes'
+        # TODO: Check for correct structure of 'new_nodes'
 
         # Check that lookup tables are not None
         if self.dir_node_lookup == None or self.dir_segment_lookup == None or self.node_lookup == None or self.segment_lookup == None:
             
-            pass # Should I do this? They should exist as long as the object has been initialized
+            pass # NOTE Should I do this? They should exist as long as the object has been initialized
 
         added, created, s_added, s_created = 0, 0, 0, 0
         # Iterate through new node connections
@@ -340,6 +340,128 @@ class NWTrace:
         if self.verbose:
             print(f"Added {added} node-segment connection(s)\nCreated {created} new node(s)\nCreated {s_created} new segment(s).\n")
 
+    def add_segments(
+            self, 
+            new_segments: list,
+            segment_field: str = "segment_id",
+            upstream_field: str = "from",
+            downstream_field: str = "to"
+        ):
+        """
+        Adds new segment connections to the existing lookup table when given a list of dictionaries formatted as [{"segment_id": ID, "from": UPSTREAM_ID, "to": DOWNSTREAM_ID}]. 
+        
+        Will add the new connections to both directional and non-directional lookup tables.
+        If the connecting segment or node does not exist, a new entry will be added.
+        The connecting elements to each segment may be either nodes or other segments.
+        If an upstream or downstream connection is an existing segment, the next (or previous) node will be added instead.
+
+        Parameters
+        ----------
+        new_segments : list
+            A dictionary of new segments connected to nodes or other segments formatted as {"segment_id": ID, "from": UPSTREAM_ID, "to": DOWNSTREAM_ID}
+        segment_field : str, optional
+            Field identifier for the connecting segment, by default "segment_id"
+        upstream_field : str, optional
+            Field identifier for the upstream connection, by default "from"
+        downstream_field : str, optional
+            Field identifier for the downstream connection, by default "to"
+        """
+
+        # TODO: Check for correct structure of 'new_nodes'
+        # TODO: cleanup, incredibly ugly right now
+
+        # Check that lookup tables are not None
+        if self.dir_node_lookup == None or self.dir_segment_lookup == None or self.node_lookup == None or self.segment_lookup == None:
+            
+            pass # NOTE Should I do this? They should exist as long as the object has been initialized
+
+        added, created, s_added, s_created = 0, 0, 0, 0
+        # Iterate through new node connections
+        for entry in new_segments:
+
+            s = entry[segment_field]
+            ups = entry[upstream_field]
+            dwns = entry[downstream_field]
+
+            # For each connection, check if entry already exists in node or segment lookup tables
+
+            # if the connecting end is not a node, search for the next available node
+            if dwns in self.dir_segment_lookup:
+                dwns = self.dir_segment_lookup[dwns].get('to')[0] if len(self.dir_segment_lookup[dwns].get('to')) > 0 else None
+                
+            if ups in self.dir_segment_lookup:
+                ups = self.dir_segment_lookup[ups].get('from')[0] if len(self.dir_segment_lookup[ups].get('from')) > 0 else None
+
+            # Non-directional
+            if s in self.segment_lookup:
+                
+                # add the upstream node if it doesn't already exist
+                if ups not in self.segment_lookup[s] and ups != None:
+                    self.segment_lookup[s].add(ups)
+                    s_added += 1
+
+                # add the downstream node if it doesn't already exist
+                if dwns not in self.segment_lookup[s] and dwns != None:
+                    self.segment_lookup[s].add(dwns)
+                    s_added += 1
+                    
+            else:
+                
+                to_add = set()
+                if ups != None:
+                    to_add.add(ups)
+                
+                if dwns != None:
+                    to_add.add(dwns)
+
+                self.segment_lookup[s] = to_add
+                s_created += 1
+
+            # add node->segment connections
+            if ups in self.node_lookup:
+                self.node_lookup[ups].add(s)
+                added += 1
+            elif ups != None:
+                self.node_lookup[ups] = {s}
+                created += 1
+
+            if dwns in self.node_lookup:
+                self.node_lookup[dwns].add(s)
+                added += 1
+            elif dwns != None:
+                self.node_lookup[dwns] = {s}
+                created += 1
+            
+
+            # Directional
+            
+            # segments
+            if s in self.dir_segment_lookup:
+                if ups not in self.dir_segment_lookup[s]['from'] and ups != None:
+                    self.dir_segment_lookup[s]['from'].append(ups) 
+
+                if dwns not in self.dir_segment_lookup[s]['to'] and dwns != None:
+                    self.dir_segment_lookup[s]['to'].append(dwns) 
+
+            else:
+                self.dir_segment_lookup[s] = {
+                    'to': [dwns] if dwns != None else [], 
+                    'from': [ups] if ups != None else []
+                }    
+
+            # nodes
+            if ups in self.dir_node_lookup:
+                self.dir_node_lookup[ups]['out'].append(s)
+            elif ups != None:
+                self.dir_node_lookup[ups] = {'in': [], 'out': [s]}
+                
+            if dwns in self.dir_node_lookup:
+                self.dir_node_lookup[dwns]['in'].append(s)
+            elif dwns != None:
+                self.dir_node_lookup[dwns] = {'in': [s], 'out': []}
+
+        if self.verbose:
+            print(f"Added {added} node-segment connection(s)\nCreated {created} new node(s)\nCreated {s_created} new segment(s).\n")
 
     # Getters
 
@@ -366,6 +488,7 @@ class NWTrace:
         """
 
         return self.dir_node_lookup, self.dir_segment_lookup
+    
     
         
             
