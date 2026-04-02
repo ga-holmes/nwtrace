@@ -5,7 +5,7 @@ from tqdm import tqdm
 import pandas as pd
 from pathlib import Path
 
-from .utils import dfs, dfs_directed
+from .utils import dfs, dfs_directed, find_nearby_segments
 
 class NWTrace:
 
@@ -18,6 +18,7 @@ class NWTrace:
         working_dir: str | Path = ".",
         output_dir: str | Path = "./out",
         verbose: bool = False,
+        crs: str = None
     ) -> None:
         """
         Initializes a NWTrace object instance
@@ -38,6 +39,8 @@ class NWTrace:
             Path to an output directory, by default "./out"
         verbose : bool, optional
             Set to True to print progress indicators, by default False
+        crs: str, optional
+            Set the crs in EPSG format, by default will use network crs
         """
 
         self.working_dir = Path(working_dir)
@@ -67,6 +70,12 @@ class NWTrace:
         self.id_field = id_field
         self.upstream_field = upstream_field
         self.downstream_field = downstream_field
+
+        # set the crs
+        # TODO: Add check for validity later
+        if crs is not None:
+            self.network_main = self.network_main.to_crs(crs)
+            self.crs = crs
 
         # Initialize lookup tables
         # NOTE: May change later so that tables are created at runtime (not at initialization)
@@ -278,7 +287,10 @@ class NWTrace:
             self, 
             new_nodes: list,
             node_field: str = "node_id",
-            segment_field: str = "segment_id"
+            segment_field: str = "segment_id",
+            geometry_field: str = "geometry",
+            search_geometry: bool = False,
+            distance_threshold: float = 0.1
         ):
         """
         Adds new upstream node connections to the existing lookup table when given a list of dictionaries formatted as [{NODE_ID: {"segment_id": SEGMENT_ID}}]. 
@@ -294,9 +306,80 @@ class NWTrace:
             Field identifier for the node, by default "node_id"
         segment_field : str, optional
             Field identifier for the connecting segment, by default "segment_id"
+        geometry_field : str, optional
+            Field identifier for the node geometry, by default, "geometry"
+        search_geometry : bool, optional
+            If True, will look for nearby segment geometry when 'to' connection is None 
+            (requires a 'geometry' field - Ex. {NODE_ID: {"segment_id": SEGMENT_ID, "geometry": GEOMETRY}}), 
+            by default False
         """
 
         # TODO: Check for correct structure of 'new_nodes'
+
+        if search_geometry and not all(geometry_field in inner for inner in new_nodes.values()):
+            raise ValueError("WARNING: search_geometry is set to true, but no geometry data has been provided. All None values will be ignored")
+        # Find all nearby segments for nodes where the segment field is None
+        elif search_geometry:
+
+            # get only node geometry where there are none-values
+            gdf_nodes = gpd.GeoDataFrame.from_dict(new_nodes, orient="index", crs=self.network_main.crs)
+            gdf_nodes_none = gdf_nodes[gdf_nodes[segment_field].isna()]
+
+            # find nearby segments
+            nearby_segs = find_nearby_segments(
+                gdf_nodes_none,
+                self.network_main,
+                node_field,
+                distance_threshold
+            )
+
+            # Filter out segments already connected to the node in the data
+            def not_already_connected(row):
+                node = row[node_field]
+                ups = self.dir_segment_lookup[row[self.id_field]].get('from')
+                dwns= self.dir_segment_lookup[row[self.id_field]].get('to')
+                
+                if node in ups or node in dwns:
+                    return False
+                else:
+                    return True
+                    
+            # apply the above funtion to nearby nodes (extaract all nodes that arent connected to segments in the lookup table)
+            nearby_segs = nearby_segs[
+                nearby_segs.apply(not_already_connected, axis=1)
+            ]
+
+            # get only proposed node-segment connectioned with the minimum distance
+            idx = (
+                nearby_segs
+                .groupby([node_field])['dist']
+                .idxmin()
+            )
+
+            # get a subset of nearby nodes containing only the potential connections witht the closest endpoint-node distance
+            best_candidates = nearby_segs.loc[idx].drop_duplicates()[[self.id_field, node_field]].set_index(node_field)
+
+            # update the new_nodes dict to contain the best candidates.
+
+        # clean up new nodes (remove none values or replace with geometrically defined segment connections)
+        cleaned_nodes = {}
+        for n, segs in new_nodes.items():
+
+            if n == 'CN16487':
+                pass
+
+            s = segs.get(segment_field)
+
+            if s is not None:
+                cleaned_nodes[n] = s
+                continue
+
+            elif search_geometry and geometry_field in segs:
+                candidate = best_candidates[self.id_field].get(n)
+                
+                if candidate is not None:
+                    cleaned_nodes[n] = candidate
+                
 
         # Check that lookup tables are not None
         if self.dir_node_lookup == None or self.dir_segment_lookup == None or self.node_lookup == None or self.segment_lookup == None:
@@ -305,9 +388,7 @@ class NWTrace:
 
         added, created, s_added, s_created = 0, 0, 0, 0
         # Iterate through new node connections
-        for n in new_nodes.keys():
-
-            s = new_nodes[n][segment_field]
+        for n, s in cleaned_nodes.items():
 
             # For each connection, check if entry already exists
 
