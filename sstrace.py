@@ -44,9 +44,16 @@ fittings = gpd.read_file("data/additional_node.geojson")
 nodes_up = (fittings[["FACILITYID", "TO_FIXED"]]
             .dropna(subset=["FACILITYID", "TO_FIXED"]) # remove rows with None values
             .rename(columns={"FACILITYID": 'node_id', "TO_FIXED": 'segment_id'})
-            .to_dict(orient="records"))
+            .set_index('node_id').to_dict(orient="index"))
 
 sewershed.add_upstream_nodes(nodes_up)
+
+catchbasin_leads = gpd.read_file("data/additional_segment.geojson")
+new_segs = (catchbasin_leads[["FACILITYID", "UP_ASSET_ID", "DN_ASSET_ID"]]
+            .rename(columns={"FACILITYID": 'segment_id', "UP_ASSET_ID": 'from', "DN_ASSET_ID": 'to'})
+            .set_index('segment_id').to_dict(orient="index"))
+
+sewershed.add_segments(new_segs)
 
 if multiple == False:
     result = sewershed.trace_sewershed(

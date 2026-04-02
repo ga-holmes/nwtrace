@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "additional_segment",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::26717" } },
+"features": [
+{ "type": "Feature", "properties": { "FACILITYID": "CL1414539", "UP_ASSET_ID": "CB4075012952", "DN_ASSET_ID": "SL1408884" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ 629002.492301187594421, 4840539.729997687041759 ], [ 629001.790085111511871, 4840539.020261862315238 ] ] ] } }
+]
+}

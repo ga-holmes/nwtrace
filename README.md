@@ -17,11 +17,11 @@ This tool is a work-in-progress and therefore several features are not implement
 - [X] Add capability to add new connections to a lookup table.
 - [X] Add tools to verify spatial geometry
 - [ ] Document spatial geometry verification tools
-- [ ] Add robust error handling
+- [X] Add robust error handling
 - [ ] Refactor as module
 - [ ] Generalize to other use-cases
 - [ ] Add option to output to spatial data (apply the subnetwork to spatial data)
-- [ ] Interpret informal connected network from geospatial connections
+- [X] Interpret informal connected network from geospatial connections
 - [ ] Add adjacent QGIS plugin
 
 ---

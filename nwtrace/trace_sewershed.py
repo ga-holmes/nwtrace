@@ -273,6 +273,7 @@ class NWTrace:
         )
 
     # NOTE: Currently only supports upstream connections, may extend to downstream as well later
+    # TODO: maybe adjust to accept more 'normal' table and convert to map later
     def add_upstream_nodes(
             self, 
             new_nodes: list,
@@ -280,7 +281,7 @@ class NWTrace:
             segment_field: str = "segment_id"
         ):
         """
-        Adds new upstream node connections to the existing lookup table when given a list of dictionaries formatted as [{"node_id": ID, "segment_id": ID}]. 
+        Adds new upstream node connections to the existing lookup table when given a list of dictionaries formatted as [{NODE_ID: {"segment_id": SEGMENT_ID}}]. 
         
         Will add the new connections to both directional and non-directional lookup tables.
         If the connecting segment or node does not exist, a new entry will be added.
@@ -288,7 +289,7 @@ class NWTrace:
         Parameters
         ----------
         new_nodes : list
-            A dictionary of new nodes connected to segments formatted as {"node_id": "segment_id"}
+            A dictionary of new nodes connected to segments formatted as {NODE_ID: {"segment_id": SEGMENT_ID}}
         node_field : str, optional
             Field identifier for the node, by default "node_id"
         segment_field : str, optional
@@ -304,10 +305,9 @@ class NWTrace:
 
         added, created, s_added, s_created = 0, 0, 0, 0
         # Iterate through new node connections
-        for entry in new_nodes:
+        for n in new_nodes.keys():
 
-            n = entry[node_field]
-            s = entry[segment_field]
+            s = new_nodes[n][segment_field]
 
             # For each connection, check if entry already exists
 
@@ -340,6 +340,7 @@ class NWTrace:
         if self.verbose:
             print(f"Added {added} node-segment connection(s)\nCreated {created} new node(s)\nCreated {s_created} new segment(s).\n")
 
+    # TODO: maybe adjust to accept more 'normal' table and convert to map later
     def add_segments(
             self, 
             new_segments: list,
@@ -348,7 +349,7 @@ class NWTrace:
             downstream_field: str = "to"
         ):
         """
-        Adds new segment connections to the existing lookup table when given a list of dictionaries formatted as [{"segment_id": ID, "from": UPSTREAM_ID, "to": DOWNSTREAM_ID}]. 
+        Adds new segment connections to the existing lookup table when given a list of dictionaries formatted as [{ID: { "from": UPSTREAM_ID, "to": DOWNSTREAM_ID} }]. 
         
         Will add the new connections to both directional and non-directional lookup tables.
         If the connecting segment or node does not exist, a new entry will be added.
@@ -358,7 +359,7 @@ class NWTrace:
         Parameters
         ----------
         new_segments : list
-            A dictionary of new segments connected to nodes or other segments formatted as {"segment_id": ID, "from": UPSTREAM_ID, "to": DOWNSTREAM_ID}
+            A table of new segments connected to nodes or other segments formatted as {ID: { "from": UPSTREAM_ID, "to": DOWNSTREAM_ID} }
         segment_field : str, optional
             Field identifier for the connecting segment, by default "segment_id"
         upstream_field : str, optional
@@ -377,13 +378,19 @@ class NWTrace:
 
         added, created, s_added, s_created = 0, 0, 0, 0
         # Iterate through new node connections
-        for entry in new_segments:
+        for s in new_segments.keys():
 
-            s = entry[segment_field]
-            ups = entry[upstream_field]
-            dwns = entry[downstream_field]
+            ups = new_segments[s][upstream_field]
+            dwns = new_segments[s][downstream_field]
 
             # For each connection, check if entry already exists in node or segment lookup tables
+
+            # in case where dwns or ups is in the new segment dataset (ex. leads connecting to other leads) traverse until they are not
+            while dwns != None and dwns in new_segments and dwns != s: # must be careful not to infinitely loop
+                dwns = new_segments[dwns].get('to')
+                
+            while ups != None and ups in new_segments and ups != s:
+                ups = new_segments[ups].get('from')
 
             # if the connecting end is not a node, search for the next available node
             if dwns in self.dir_segment_lookup:
@@ -442,7 +449,6 @@ class NWTrace:
 
                 if dwns not in self.dir_segment_lookup[s]['to'] and dwns != None:
                     self.dir_segment_lookup[s]['to'].append(dwns) 
-
             else:
                 self.dir_segment_lookup[s] = {
                     'to': [dwns] if dwns != None else [], 
