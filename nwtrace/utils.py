@@ -718,6 +718,7 @@ def repair_node_connections(
 
     return nodes_fixed
 
+# NOTE: Remove?
 def repair_network(
     errors: list,
     lines: str | Path | gpd.GeoDataFrame,
@@ -818,6 +819,7 @@ def repair_network(
     
     return node_lookup, segment_lookup
 
+
 # NOTE: add verbose mode?
 def network_from_geometry(
     segments: str | Path | gpd.GeoDataFrame,
@@ -826,6 +828,28 @@ def network_from_geometry(
     node_id_field: str,
     distance_threshold: int = 1
 ) -> gpd.GeoDataFrame:
+    """
+    Given a dataset containing segments and nodes that connect segments, 
+    generates a new GeoDataFrame with the segment geometry that includes columns indicating upstream and downstream node connections.
+
+    Parameters
+    ----------
+    segments : str | Path | gpd.GeoDataFrame
+        The dataset of segments that are connected by nodes.
+    nodes : str | Path | gpd.GeoDataFrame
+        The dataset of nodes that connect the segments.
+    segment_id_field : str
+        The column name for the unique identifier for segments.
+    node_id_field : str
+        The column name for the unique identifier for nodes.
+    distance_threshold : int, optional
+        The maximum distance between geometries to search for connecitons, by default 1
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        The segment geometry including node connection information.
+    """
     # Create to/from node connection entries in the given line/segment vector dataset based on appropriate point/nodes in the respective dataset
 
     # Verify input geometry values
@@ -865,9 +889,9 @@ def network_from_geometry(
         values=node_id_field
     )
 
-    best_candidates = best_candidates.join(distances, lsuffix="", rsuffix="_dist").reset_index().rename(columns={"segment_id": segment_id_field})
+    geo_network = best_candidates.join(distances, lsuffix="", rsuffix="_dist").reset_index().rename(columns={"segment_id": segment_id_field})
     
-    return best_candidates
+    return geo_network
 
 def verify_flow_directionality(
     segments: str | Path | gpd.GeoDataFrame,
