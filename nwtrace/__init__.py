@@ -8,8 +8,12 @@ from .utils import (
     dfs_directed_recursive
 )
 
+from .repair import (
+    filter_existing_pairs
+)
+
 # Define the __all__ variable
 # __all__ = ['NWTrace', 'ASI', 'utils']
-__all__ = ['NWTrace', 'utils']
+__all__ = ['NWTrace', 'utils', 'repair']
 
 version = "0.0.1"

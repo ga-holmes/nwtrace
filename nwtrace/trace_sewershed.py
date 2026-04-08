@@ -452,6 +452,8 @@ class NWTrace:
         # TODO: Check for correct structure of 'new_nodes'
         # TODO: cleanup, incredibly ugly right now
 
+        # Check null values for nearby nodes
+
         # Check that lookup tables are not None
         if self.dir_node_lookup == None or self.dir_segment_lookup == None or self.node_lookup == None or self.segment_lookup == None:
             

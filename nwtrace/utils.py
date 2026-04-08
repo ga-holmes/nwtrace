@@ -683,7 +683,7 @@ def repair_node_connections(
 
         # returns true when a row from 'nearby_nodes' is not connected to the associated segment in the lookup table
     def not_already_connected(row):
-        node = row["node_id"]
+        node = row["node_id"]  
         ups = row[upstream_field]
         dwns= row[downstream_field]
         
