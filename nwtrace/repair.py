@@ -192,15 +192,19 @@ def filter_minimum_value(
     pd.DataFrame | gpd.GeoDataFrame
         The filtered data structure
     """
+
+    # Resets index in case of duplicate index values
+    temp = df.reset_index(drop=True)
+    
     # get only proposed group_key pair with the minimum
-    idx = (
-        df
+    pos = (
+        temp
         .groupby(group_keys)[target_key]
         .idxmin()
     )
 
     # get a subset containing only the pairs with the lowest value
-    return df.loc[idx].drop_duplicates()
+    return df.iloc[pos.values].drop_duplicates()
 
 # mid level wrappers
 
