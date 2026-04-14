@@ -163,6 +163,9 @@ def filter_existing_pairs(
     pd.DataFrame | gpd.GeoDataFrame
         The filtered DataFrame/GeoDataFrame
     """
+    # if df is empty, just return it
+    if len(df) == 0: return df
+
     # create list with just the two relevant columns
     idx = list(zip(df[left_key], df[right_key]))
     # mask out values that are the same
@@ -295,7 +298,9 @@ def repair_connections(
     filtered_geometries = filter_existing_pairs(filtered_geometries, primary_id_field, reference_id_field)
 
     # For each geometry, get only the connection with the minimum distance value
-    best_candidates = filter_minimum_value(filtered_geometries, 'dist', [primary_id_field])
+    filtered_geometries = filter_minimum_value(filtered_geometries, 'dist', [primary_id_field])
+
+    best_candidates = filtered_geometries[[primary_id_field, reference_id_field]]
 
     # rename colums to prepare for updating
     best_candidates = best_candidates.rename(
@@ -308,7 +313,7 @@ def repair_connections(
     primary_fixed = primary_dataset.set_index(primary_id_field, drop=False)
     primary_fixed.update(best_candidates)
 
-    return primary_fixed
+    return primary_fixed, best_candidates
 
 # high level wrappers
 
