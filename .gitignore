@@ -1,6 +1,7 @@
 data/more
 out/*.csv
 out/*.gpkg
+out/*.geojson
 *.qmd
 __pycache__
 sstrace_interactive.py
@@ -11,3 +12,4 @@ dem_test.py
 stats.ipynb
 watershed_test.ipynb
 w_sstrace.ipynb
+test.ipynb
