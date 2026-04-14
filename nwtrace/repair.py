@@ -292,7 +292,7 @@ def repair_connections(
     nearby_geometry = find_nearby_geometry(primary_dataset, reference_dataset, distance_threshold=distance_threshold)
 
     # filter out items where the geometries are already connected
-    filtered_geometries = filter_existing_pairs(nearby_geometry, primary_id_field, connection_field)
+    filtered_geometries = filter_existing_pairs(nearby_geometry, reference_id_field, connection_field)
 
     # filter items where the connecting item is the same as itself
     filtered_geometries = filter_existing_pairs(filtered_geometries, primary_id_field, reference_id_field)
@@ -313,7 +313,7 @@ def repair_connections(
     primary_fixed = primary_dataset.set_index(primary_id_field, drop=False)
     primary_fixed.update(best_candidates)
 
-    return primary_fixed, best_candidates
+    return primary_fixed
 
 # high level wrappers
 
@@ -354,82 +354,83 @@ def repair_segment_connections(
         The repaired segment dataset with updated geometry-based node connections
     """
 
-    # If the ID field names are the same, make sure to note to the user that they'll be altered when joining the datasets in 'find_nearby_nodes -> find_nearby_geometry'
     if segment_id_field == node_id_field:
         # NOTE: If we don't want to exit out, might be possible to temporarily rename the fields here, and just let the user know in verbose mode
         raise ValueError("The segment ID field has the same name as the node ID field. When the two datasets are joined, the columns will be renamed to '{`node_id_field`}_left' and '{`segment_id_field`}_right respectively'.")
 
-    # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
-    nearby_nodes = find_nearby_nodes(segments, nodes, distance_threshold=distance_threshold, set_from_field='from', set_to_field='to', set_role_field='role')
-    
+    # get endpoints for each segment
+    endpoints_gdf = split_segments(segments, keep_segment_geometry=False, set_from_field='from', set_to_field='to', set_role_field='role')
+
     # split into two tables with 'from' and 'to' roles respectively
-    from_nodes = nearby_nodes[nearby_nodes['role'] == 'from']
-    to_nodes = nearby_nodes[nearby_nodes['role'] == 'to']
-    
-    # filter out nodes that are already connected to segments in the lookup table)
-    from_nodes_filtered = filter_existing_pairs(from_nodes, node_id_field, upstream_field)
-    to_nodes_filtered = filter_existing_pairs(to_nodes, node_id_field, downstream_field)
+    from_nodes = endpoints_gdf[endpoints_gdf['role'] == 'from']
+    to_nodes = endpoints_gdf[endpoints_gdf['role'] == 'to']
 
-    # combine back to one dataset
-    filtered_nodes = pd.concat([from_nodes_filtered, to_nodes_filtered], ignore_index=True)
-    
-    # filter items where node_id and segment_id are the same
-    filtered_nodes = filter_existing_pairs(filtered_nodes, node_id_field, segment_id_field)
-
-    # For each 'node' - 'role' pair, get only the one with the minimum value
-    best_candidates = filter_minimum_value(filtered_nodes, 'dist', [segment_id_field, 'role'])
-
-    # pivot the table to that 'from' and 'to' roles become columns, then rename to prepare to update the dataset
-    best_candidates = best_candidates.pivot(
-        index=segment_id_field,
-        columns="role",
-        values=node_id_field
-    ).rename(
-        columns={
-            "from": upstream_field,
-            "to": downstream_field
-        }
+    # repair 'from' connections
+    repair_segments_a = repair_connections(
+        primary_dataset=from_nodes,
+        reference_dataset=nodes,
+        primary_id_field=segment_id_field,
+        reference_id_field=node_id_field,
+        connection_field=upstream_field,
+        distance_threshold=distance_threshold
     )
-    
-    # update the initial segment dataset
-    segments_fixed = segments.set_index(segment_id_field, drop=False)
-    segments_fixed.update(best_candidates)
-    
-    return segments_fixed
 
+    repair_segments_a = repair_segments_a[[segment_id_field, upstream_field]]
 
-def repair_node_connections(
-    nodes: str | Path | gpd.GeoDataFrame,
-    segments: str | Path | gpd.GeoDataFrame,
-    node_id_field: str,
-    segment_id_field: str,
-    connection_field: str,
-    upstream_field: str, 
-    downstream_field: str,
-    distance_threshold: int = 1
-) -> gpd.GeoDataFrame:
+    # repair 'to' connections
+    repair_segments_b = repair_connections(
+        primary_dataset=to_nodes,
+        reference_dataset=nodes,
+        primary_id_field=segment_id_field,
+        reference_id_field=node_id_field,
+        connection_field=downstream_field,
+        distance_threshold=distance_threshold
+    )
 
-    # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
-    nearby_segs = find_nearby_geometry(nodes, segments, distance_threshold=distance_threshold)
+    repair_segments_b = repair_segments_b[[segment_id_field, downstream_field]]
 
-    # filter out items where the node and segment are already connected
-    filtered_segs = filter_existing_pairs(nearby_segs, node_id_field, upstream_field)
-    filtered_segs = filter_existing_pairs(filtered_segs, node_id_field, downstream_field)
+    # update the original dataset with both repaired dataframes
+    repaired_segments = segments.set_index(segment_id_field, drop=False)
 
-    # filter items where node_id and segment_id are the same
-    filtered_segs = filter_existing_pairs(filtered_segs, segment_id_field, node_id_field)
+    # update the input dataset
+    repaired_segments.update(repair_segments_a)
+    repaired_segments.update(repair_segments_b)
 
-    # For each 'node' - 'role' pair, get only the one with the minimum value
-    best_candidates = filter_minimum_value(filtered_segs, 'dist', [node_id_field])
+    return repaired_segments
 
-    # rename colums to prepare for updating
-    best_candidates = best_candidates.rename(
-        columns={
-            segment_id_field: connection_field,
-        }
-    ).set_index(node_id_field)
+# Old version that also checks the upstream and downstream connections
+# def repair_node_connections(
+#     nodes: str | Path | gpd.GeoDataFrame,
+#     segments: str | Path | gpd.GeoDataFrame,
+#     node_id_field: str,
+#     segment_id_field: str,
+#     connection_field: str,
+#     upstream_field: str, 
+#     downstream_field: str,
+#     distance_threshold: int = 1
+# ) -> gpd.GeoDataFrame:
 
-    nodes_fixed = nodes.set_index(node_id_field, drop=False)
-    nodes_fixed.update(best_candidates)
+#     # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
+#     nearby_segs = find_nearby_geometry(nodes, segments, distance_threshold=distance_threshold)
 
-    return nodes_fixed
+#     # filter out items where the node and segment are already connected
+#     filtered_segs = filter_existing_pairs(nearby_segs, node_id_field, upstream_field)
+#     filtered_segs = filter_existing_pairs(filtered_segs, node_id_field, downstream_field)
+
+#     # filter items where node_id and segment_id are the same
+#     filtered_segs = filter_existing_pairs(filtered_segs, segment_id_field, node_id_field)
+
+#     # For each 'node' - 'role' pair, get only the one with the minimum value
+#     best_candidates = filter_minimum_value(filtered_segs, 'dist', [node_id_field])
+
+#     # rename colums to prepare for updating
+#     best_candidates = best_candidates.rename(
+#         columns={
+#             segment_id_field: connection_field,
+#         }
+#     ).set_index(node_id_field)
+
+#     nodes_fixed = nodes.set_index(node_id_field, drop=False)
+#     nodes_fixed.update(best_candidates)
+
+#     return nodes_fixed
