@@ -261,7 +261,9 @@ def repair_connections(
     primary_id_field: str,
     reference_id_field: str,
     connection_field: str,
-    distance_threshold: int = 1
+    reference_connection_fields: list = [],
+    distance_threshold: int = 1,
+    reset_index: bool = True
 ) -> gpd.GeoDataFrame:
     """
     Compares connections listed in the 'connection_field' of the 'primary_dataset' to the 'reference_dataset' 
@@ -279,8 +281,12 @@ def repair_connections(
         The column/field name indicating the unique ID of items in the primary dataset
     connection_field : str
         The column/field name indicating the connections to items from the reference_dataset to the primary dataset
+    reference_connection_fields : list, optional
+        Additional fields in the reference dataset to check for connections against the primary dataset, by default an empty list
     distance_threshold : int, optional
         The maximum distance to search for a geometric connection, by default 1
+    reset_index : bool, optional
+        Reset the index back to a column on return, by default True
 
     Returns
     -------
@@ -293,6 +299,10 @@ def repair_connections(
 
     # filter out items where the geometries are already connected
     filtered_geometries = filter_existing_pairs(nearby_geometry, reference_id_field, connection_field)
+
+    # filter out additional connections
+    for field_name in reference_connection_fields:
+        filtered_geometries = filter_existing_pairs(nearby_geometry, primary_id_field, field_name)
 
     # filter items where the connecting item is the same as itself
     filtered_geometries = filter_existing_pairs(filtered_geometries, primary_id_field, reference_id_field)
@@ -307,11 +317,14 @@ def repair_connections(
         columns={
             reference_id_field: connection_field,
         }
-    ).set_index(primary_id_field)
+    ).set_index(primary_id_field, drop=False)
 
     # update the primary dataset with the new values
     primary_fixed = primary_dataset.set_index(primary_id_field, drop=False)
     primary_fixed.update(best_candidates)
+
+    if reset_index:
+        primary_fixed = primary_fixed.reset_index(drop=True)
 
     return primary_fixed
 
@@ -372,7 +385,8 @@ def repair_segment_connections(
         primary_id_field=segment_id_field,
         reference_id_field=node_id_field,
         connection_field=upstream_field,
-        distance_threshold=distance_threshold
+        distance_threshold=distance_threshold,
+        reset_index=False
     )
 
     repair_segments_a = repair_segments_a[[segment_id_field, upstream_field]]
@@ -384,7 +398,8 @@ def repair_segment_connections(
         primary_id_field=segment_id_field,
         reference_id_field=node_id_field,
         connection_field=downstream_field,
-        distance_threshold=distance_threshold
+        distance_threshold=distance_threshold,
+        reset_index=False
     )
 
     repair_segments_b = repair_segments_b[[segment_id_field, downstream_field]]
@@ -396,7 +411,7 @@ def repair_segment_connections(
     repaired_segments.update(repair_segments_a)
     repaired_segments.update(repair_segments_b)
 
-    return repaired_segments
+    return repaired_segments.reset_index(drop=True)
 
 # Old version that also checks the upstream and downstream connections
 # def repair_node_connections(
