@@ -184,7 +184,7 @@ class ASI:
 
         return neighbours
 
-    def get_seed_cells(self, d8_dir, to_exclude = None) -> list:
+    def get_seed_cells(self, d8_dir, exclude_mask = None) -> list:
         """
         Compares all sinks in d8_dir to inlet locations (or the contents of to_exclude) 
         and excludes inlets from seed cells.
@@ -193,7 +193,7 @@ class ASI:
         ----------
         d8_dir : _type_
             _description_
-        to_exclude : _type_, optional
+        exclude_mask : a , optional
             _description_, by default None
 
         Returns
@@ -202,8 +202,8 @@ class ASI:
             A list of seed cells that can be iterated through and used for interative_asi() to calculate flow accumulation and watersheds.
         """
         
-        if to_exclude is not None:
-            sink_mask = (d8_dir == 0) & (~to_exclude)
+        if exclude_mask is not None:
+            sink_mask = (d8_dir == 0) & (~exclude_mask)
         else: 
             sink_mask = (d8_dir == 0)
 
