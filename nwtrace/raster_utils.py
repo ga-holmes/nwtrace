@@ -77,6 +77,55 @@ class conversions():
         64:  (-1,-1),    # NW
         128: (-1,0)      # N
     }
+    
+    def convert_d8_raster(
+        d8_direction_raster: str | Path,
+        format: dict,
+        output_filename: str = None
+    ):
+        """
+        Given the filepath to a d8 directional raster, will convert to a new format based on the supplied dictionary.
+        Preset conversions are supplied by the conversions() class. A custom conversion can be supplied by providing a dictionary with the format:
+        
+        {
+            cell_value: new_cell_value,
+            cell_value2: new_cell_value2,
+            ...
+            example:
+            0: "North",
+            1: "Northeast",
+            ...
+        }
+
+        Parameters
+        ----------
+        d8_direction_raster : str | Path
+            The filepath to the d8 direction raster.
+        format : dict
+            A table indicating what to change cell values to, either custom defined or predefined from the `conversions` class.
+        output_filename : str, optional
+            Specify the file name to output the converted raster to, by default, will append 'converted_' to the given filename.
+        """
+
+        if output_filename == None:
+            output_filename = f"converted_{d8_direction_raster}"
+        
+        # read the D8 pointer raster
+        with rio.open(d8_direction_raster) as src:
+            arr = src.read(1)
+            profile = src.profile
+            
+        # convert using vectorized lookup
+        # create a new array with same shape
+        out_arr = np.zeros_like(arr, dtype=np.int32)
+
+        for from_code, to_code in format.items():
+            out_arr[arr == from_code] = to_code
+
+        # write output raster
+        profile.update(dtype=rio.int32)
+        with rio.open(output_filename, "w", **profile) as dst:
+            dst.write(out_arr, 1)
 
 # raster display (for example rasters, will not look nice on very large files)
 
