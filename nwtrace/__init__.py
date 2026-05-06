@@ -12,8 +12,12 @@ from .repair import (
     filter_existing_pairs
 )
 
+from .asi import(
+    ASI
+)
+
 # Define the __all__ variable
-# __all__ = ['NWTrace', 'ASI', 'utils']
-__all__ = ['NWTrace', 'utils', 'repair']
+__all__ = ['NWTrace', 'ASI', 'utils', 'repair']
+# __all__ = ['NWTrace', 'utils', 'repair']
 
 version = "0.0.1"
