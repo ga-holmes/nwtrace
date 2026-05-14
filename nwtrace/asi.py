@@ -209,7 +209,7 @@ class ASI:
 
         sink_cells = [tuple(rc) for rc in np.argwhere(sink_mask)]
 
-        return sink_cells
+        return sink_mask, sink_cells
 
 
     def recursive_asi(self, r: int, c: int, id: str, o_id: str = None):
@@ -302,7 +302,7 @@ class ASI:
         # Each seed cell will need to have a unique ID
 
         # ------------------------
-        # The DEM will need to be modified to create intentional sinks at the locations of inlets
+        # The D8 raster will need to be modified to create intentional sinks at the locations of inlets
         # These sinks will then be given an indicator for use in the procedure
 
         # Instead of recursion, the operations are handled with a stack that acceprts arguments similarly to the function
@@ -377,7 +377,7 @@ class ASI:
                             self.d8_accum[r,c] += self.d8_accum[p,q] + 1
                                 
                 # if this is the first time ID is added, create new entry in table
-                v = self.watershed_table.setdefault(id, len(self.watershed_table))
+                v = self.watershed_table.setdefault(id, len(self.watershed_table)+1)
 
                 # assign watershed value
                 self.d8_watershed[r, c] = v
