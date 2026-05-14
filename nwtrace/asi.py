@@ -103,14 +103,18 @@ class ASI:
         # initialize empty arrays for watershed and accumulation
         self._init_accumulation_rasters()
 
-        # create the outfall mask that indicates the locations of outfalls in the dataset
+        # create the inlet & outfall mask that indicates the locations of outfalls in the dataset
         self.outfall_mask = np.zeros_like(self.d8_dir)
+        self.inlet_mask = np.zeros_like(self.d8_dir)
         
         # set the nodata value if included
         self.nodata_value = no_data_value
 
         for r,c in outfall_locations.keys():
             self.outfall_mask[r,c] = 1
+            
+        for r,c in inlet_locations.values():
+            self.inlet_mask[r,c] = 1
     
     def _init_accumulation_rasters(self):
         """
@@ -179,8 +183,11 @@ class ASI:
                 # check if it's an outfall, if yes, assign outfall ID
                 if self.outfall_mask[nr, nc] == 1:
                     o_id = self.outfall_locations[(nr, nc)]
+                    
+                # check if it's an inlet, if yes, indicate true
+                is_inlet = (self.inlet_mask[nr, nc] == 1)
 
-                neighbours.append((nr, nc, o_id))
+                neighbours.append((nr, nc, o_id, is_inlet))
 
         return neighbours
 
@@ -212,6 +219,7 @@ class ASI:
         return sink_mask, sink_cells
 
 
+    # NOTE: The recursive function does not stop accumulation beyond inlets, thus flow is duplicated. It may also allow double counting in other cases depending on topology.
     def recursive_asi(self, r: int, c: int, id: str, o_id: str = None):
         """
         Recursively trace from accumulation from the given seed cell, 
@@ -241,7 +249,7 @@ class ASI:
         # These sinks will then be given an indicator for use in the procedure
 
         # for every neighbour of (r,c)
-        for (i,j, o_id) in self._get_d8_neighbours(r, c):
+        for (i,j, o_id, is_inlet) in self._get_d8_neighbours(r, c):
             # call this function on the current cell, id is propagated for assigning the watershed
             self.recursive_asi(i,j,id,o_id)
 
@@ -269,7 +277,7 @@ class ASI:
         
         # if this is the first time ID is added, create new entry in table
         if id not in self.watershed_table:
-            v = len(self.watershed_table)
+            v = len(self.watershed_table) + 1
             self.watershed_table[id] = v
         else:
             v = self.watershed_table[id]
@@ -339,7 +347,7 @@ class ASI:
                 stack.append((r, c, id, o_id, POST, children))
                 
                 # for every neighbour of (r,c)
-                for (i,j, c_o_id) in children:    
+                for (i,j, c_o_id, is_inlet) in children:    
                     # Append only if not visited
                     if not self.visited_cells[i,j]:
                         stack.append((i, j, id, c_o_id, PRE, None))
@@ -364,8 +372,9 @@ class ASI:
             else:
                 
                 # normal cell flow
-                for ( i, j, _) in children:
-                    if self.visited_cells[i,j]:
+                for ( i, j, _, is_inlet) in children:
+                    # do not continue from this neighbour if it is an inlet
+                    if self.visited_cells[i,j] and not is_inlet:
                         self.d8_accum[r,c] += self.d8_accum[i,j] + 1
                 
                 # outfall-inlet flow
