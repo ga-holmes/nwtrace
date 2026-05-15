@@ -518,6 +518,125 @@ class ASI:
     
     
 # combined function for thalweg/single use
+
+# combined function for thalweg/single use
+def asi_flow_accumulation(
+    dem: str | Path,
+    output: str | Path,
+    inlets: str | Path | gpd.GeoDataFrame,
+    outfalls: str | Path | gpd.GeoDataFrame,
+    inlet_id_field: str,
+    outfall_id_field: str,
+    connection_field: str
+):
+    """
+    Given paths to a DEM and relevant rasters, generates a D8 flow direction raster.
+    When inlet and outfalls locations are provided alongside connection information, 
+    ASI is used to correctly route flow from inlets to outfalls.
+
+    Parameters
+    ----------
+    dem : str | Path
+        Path to a hydrologically corrected DEM.
+    output : str | Path
+        Path to output the accumulated raster to.
+    inlets : str | Path | gpd.GeoDataFrame
+        A point vector file or GeoDataFrame with the locations of inlets and their respective connections to an outfall.
+    outfalls : str | Path | gpd.GeoDataFrame
+        A point vector file or GeoDataFrame with the locations of outfalls.
+    inlet_id_field : str
+        The column name representing the ID of inlets.
+    outfall_id_field : str
+        The column name representing the ID of outfalls.
+    connection_field : str
+        The column name in the inlet data relating each inlet to an outfall.
+    """
+    
+    # TODO: verify argument validity here
+    if isinstance(inlets, (str, Path)):
+        inlets = gpd.read_file(inlets)
+    if isinstance(outfalls, (str, Path)):
+        outfalls = gpd.read_file(outfalls)
+    
+    wbt = WhiteboxTools()
+    
+    # Create the flow direction raster
+    # TODO: instead of hardcoding the flow_dir output, create a temp directory (in the same way as thalweg does)
+    out_flow_dir = "flow_dir_d8.tif"
+    wbt.d8_pointer(
+        dem=dem,
+        output=out_flow_dir,
+        esri_pntr=False
+    )
+    
+    # get gdfs with sampled row & column from input DEM
+    sampled_inlets = sample_raster_points(inlets, dem)
+    sampled_outfalls = sample_raster_points(outfalls, dem)
+    
+    # prepare outfalls dictionary
+    outfall_locs = sampled_outfalls[[outfall_id_field, 'row', 'col']].set_index(outfall_id_field).to_dict(orient='index')
+
+    outfall_locations = {}
+    for of in outfall_locs.keys():
+        outfall_locations[(outfall_locs[of]['row'], outfall_locs[of]['col'])] = of
+        
+    # prepare inlets dictionary
+    inlet_locs = sampled_inlets[[inlet_id_field, 'row', 'col']].set_index(inlet_id_field).to_dict(orient='index')
+
+    inlet_locations = {}
+    for inl in inlet_locs.keys():
+        inlet_locations[inl] = (inlet_locs[inl]['row'], inlet_locs[inl]['col'])
+        
+    # prepare connections dictionary
+    inlet_connections = {}
+    for _, r in sampled_inlets.iterrows():
+        of = r[connection_field]
+        
+        if of not in inlet_connections:
+            inlet_connections[of] = []
+        
+        inlet_connections[of].append(r[inlet_id_field])
+        
+    # add leftover outfalls that arent exit points for any inlets
+    for _, o in sampled_outfalls.iterrows():
+        out_f = o[outfall_id_field]
+        
+        if out_f not in inlet_connections:
+            inlet_connections[out_f] = []
+            
+    # run ASI
+    with rio.open(out_flow_dir) as src:
+        d8_arr = src.read(1)
+        r_crs = src.crs
+        r_transform = src.transform
+        
+    # prep the ASI class    
+    sewershed = ASI(
+        d8_flow_direction_raster = d8_arr.astype(np.int32),
+        inlet_connections=inlet_connections,
+        outfall_locations=outfall_locations,
+        inlet_locations=inlet_locations
+    )
+    
+    # run ASI for every seed 
+    seed_mask, seeds = sewershed.get_seed_cells(d8_arr, sewershed.inlet_mask)
+    for r,c in seeds:
+        sewershed.iterative_asi(r,c,f"{r}_{c}")
+    
+    # save the output accumulated raster the specified filepath
+    with rio.open(
+        output,
+        'w',
+        driver='GTiff',
+        height=sewershed.d8_watershed.shape[0],
+        width=sewershed.d8_watershed.shape[1],
+        count=1,
+        dtype=sewershed.d8_accum.dtype,
+        crs=r_crs,
+        transform=r_transform,
+    ) as dst:
+        dst.write(sewershed.d8_accum, 1)
+
 def asi_mass_flux(
     dem: str | Path,
     loading: str | Path,
