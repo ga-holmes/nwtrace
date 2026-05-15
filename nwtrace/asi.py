@@ -2,6 +2,9 @@
 import numpy as np
 from pathlib import Path
 import rasterio as rio
+import geopandas as gpd
+from whitebox import WhiteboxTools
+from .raster_utils import sample_raster_points
 
 # Defining globals here (will likely be an object later)
 
@@ -390,4 +393,254 @@ class ASI:
 
                 # assign watershed value
                 self.d8_watershed[r, c] = v
+                
+                
+    def iterative_asi_mass_flux(self, loading: str | Path | np.ndarray, efficiency: str | Path | np.ndarray, absorption: str | Path | np.ndarray, r0: int, c0: int, id: str, o_id: str = None):
+        """
+        Iteratively trace from accumulation from the given seed cell, 
+        referencing Outfall-Inlet connections and filling in self.watershed 
+        to indicate catchments based on self.watershed_type
+
+        Parameters
+        ----------
+        r0 : int
+            Location of the row of the cell to start at.
+        c0 : int
+            Location of the row of the cell to start at.
+        id : str
+            The ID of the seed cell, will be propagated depending on self.watershed_type (Default "OUTFALL")
+        o_id : str, optional
+            If withing the context of cells draining to an outfall, indicates the ID of the outall and propagates it. 
+            Set within the function, by default None. ONLY USE IF THE SEED CELL IS AN OUTFALL (end of flow)
+        """
+
+        # This is called for each seed cell
+        # r and c are the locations of 'seed' cells from which to initiate the recursive process
+        # These are edge cells, or inlets with the 'undefined' indicator
+        # Each seed cell will need to have a unique ID
+
+        # ------------------------
+        # The D8 raster will need to be modified to create intentional sinks at the locations of inlets
+        # These sinks will then be given an indicator for use in the procedure
+
+        # Instead of recursion, the operations are handled with a stack that acceprts arguments similarly to the function
+        # Stack arguments: (row, column, watershed_id, outfall_id: may be none, ORDER (PRE=0, POST=1))
+        # 'ORDER' is used to represent whether, for each cell visit, we should find children (i.e. get neighbours), or accumulate flow (flow cannot accumulate until we've reached the 'top' of the DEM)
+
+        # if accumulation has already been computed, abort
+        if self.d8_accum[r0, c0] != 0:
+            print("accumulation already computed, canceling")
+            return
+        
+        if isinstance(loading, (str, Path)):
+            with rio.open(loading) as src:
+                loading = src.read(1)
+
+        if isinstance(efficiency, (str, Path)):
+            with rio.open(efficiency) as src:
+                efficiency = src.read(1)
+
+        if isinstance(absorption, (str, Path)):
+            with rio.open(absorption) as src:
+                absorption = src.read(1)
+
+        
+        PRE = 0
+        POST = 1
+        
+        stack = []
+        # top of stack
+        stack.append((r0, c0, id, o_id, PRE, None))
+        
+        while stack:
+            r, c, id, o_id, phase, children = stack.pop()
+            
+            # pre visit
+            if phase == PRE:
+                
+                # check if in visited
+                if self.visited_cells[r, c]:
+                    continue
+                
+                self.visited_cells[r,c] = True
+                
+                children = self._get_d8_neighbours(r, c)
+                    
+                # push POST phase for next iteration
+                stack.append((r, c, id, o_id, POST, children))
+                
+                # for every neighbour of (r,c)
+                for (i,j, c_o_id, is_inlet) in children:    
+                    # Append only if not visited
+                    if not self.visited_cells[i,j]:
+                        stack.append((i, j, id, c_o_id, PRE, None))
+
+                # If cell (r,c) is an outfall:
+                if o_id is not None:
+                    for i_id in self.inlet_connections[o_id]:
+
+                        p, q = self.inlet_locations[i_id]
+
+                        w_id = {
+                            "OUTLET": id,
+                            "OUTFALL": o_id,
+                            "INLET":  i_id
+                        }[self.watershed_type]
+
+                        # Push new inlet cell to stack including new watershed id (based on above)
+                        if not self.visited_cells[p,q]:
+                            stack.append((p, q, w_id, None, PRE, None))
+                
+            # post visit
+            else:
+                
+                # normal cell flow
+                for ( i, j, _, is_inlet) in children:
+                    # do not continue from this neighbour if it is an inlet
+                    if self.visited_cells[i,j] and not is_inlet:
+                        # accumulate here
+                        self.d8_accum[r,c] += (loading[i,j] - absorption[i,j] + (self.d8_accum[i,j])) * efficiency[i,j]
+                
+                # outfall-inlet flow
+                if o_id is not None:
+                    for i_id in self.inlet_connections[o_id]:
+                        p, q = self.inlet_locations[i_id]
+                        
+                        if self.visited_cells[p,q]:
+                            # accumulate here
+                            self.d8_accum[r,c] += (loading[p,q] - absorption[p,q] + (self.d8_accum[p,q])) * efficiency[p,q]
+                                
+                # if this is the first time ID is added, create new entry in table
+                v = self.watershed_table.setdefault(id, len(self.watershed_table)+1)
+
+                # assign watershed value
+                self.d8_watershed[r, c] = v
     
+    
+# combined function for thalweg/single use
+def asi_mass_flux(
+    dem: str | Path,
+    loading: str | Path,
+    efficiency: str | Path,
+    absorption: str | Path,
+    output: str | Path,
+    inlets: str | Path | gpd.GeoDataFrame,
+    outfalls: str | Path | gpd.GeoDataFrame,
+    inlet_id_field: str,
+    outfall_id_field: str,
+    connection_field: str
+):
+    """
+    Given paths to a DEM and relevant rasters, generates a D8 flow direction raster, 
+    and calculates flow accumulation with a mass flux formula. 
+    When inlet and outfalls locations are provided alongside connection information, 
+    ASI is used to correctly route flow from inlets to outfalls.
+
+    Parameters
+    ----------
+    dem : str | Path
+        Path to a hydrologically corrected DEM.
+    loading : str | Path
+        Path to a raster where cells represent the loading amount for the calculation.
+    efficiency : str | Path
+        Path to a raster where cells represent the proportion of flow carried forward to the next cell.
+    absorption : str | Path
+        Path to a raster where cells represent the amount of flow lost between each cell.
+    output : str | Path
+        Path to output the accumulated raster to.
+    inlets : str | Path | gpd.GeoDataFrame
+        A point vector file or GeoDataFrame with the locations of inlets and their respective connections to an outfall.
+    outfalls : str | Path | gpd.GeoDataFrame
+        A point vector file or GeoDataFrame with the locations of outfalls.
+    inlet_id_field : str
+        The column name representing the ID of inlets.
+    outfall_id_field : str
+        The column name representing the ID of outfalls.
+    connection_field : str
+        The column name in the inlet data relating each inlet to an outfall.
+    """
+    
+    # TODO: verify argument validity here
+    if isinstance(inlets, (str, Path)):
+        inlets = gpd.read_file(inlets)
+    if isinstance(outfalls, (str, Path)):
+        outfalls = gpd.read_file(outfalls)
+    
+    wbt = WhiteboxTools()
+    
+    # Create the flow direction raster
+    # TODO: instead of hardcoding the flow_dir output, create a temp directory (in the same way as thalweg does)
+    out_flow_dir = "flow_dir_d8.tif"
+    wbt.d8_pointer(
+        dem=dem,
+        output=out_flow_dir,
+        esri_pntr=False
+    )
+    
+    # get gdfs with sampled row & column from input DEM
+    sampled_inlets = sample_raster_points(inlets, dem)
+    sampled_outfalls = sample_raster_points(outfalls, dem)
+    
+    # prepare outfalls dictionary
+    outfall_locs = sampled_outfalls[[outfall_id_field, 'row', 'col']].set_index(outfall_id_field).to_dict(orient='index')
+
+    outfall_locations = {}
+    for of in outfall_locs.keys():
+        outfall_locations[(outfall_locs[of]['row'], outfall_locs[of]['col'])] = of
+        
+    # prepare inlets dictionary
+    inlet_locs = sampled_inlets[[inlet_id_field, 'row', 'col']].set_index(inlet_id_field).to_dict(orient='index')
+
+    inlet_locations = {}
+    for inl in inlet_locs.keys():
+        inlet_locations[inl] = (inlet_locs[inl]['row'], inlet_locs[inl]['col'])
+        
+    # prepare connections dictionary
+    inlet_connections = {}
+    for _, r in sampled_inlets.iterrows():
+        of = r[connection_field]
+        
+        if of not in inlet_connections:
+            inlet_connections[of] = []
+        
+        inlet_connections[of].append(r[inlet_id_field])
+        
+    # add leftover outfalls that arent exit points for any inlets
+    for _, o in sampled_outfalls.iterrows():
+        out_f = o[outfall_id_field]
+        
+        if out_f not in inlet_connections:
+            inlet_connections[out_f] = []
+            
+    # run ASI
+    with rio.open(out_flow_dir) as src:
+        d8_arr = src.read(1)
+        r_crs = src.crs
+        r_transform = src.transform
+        
+    # prep the ASI class    
+    sewershed = ASI(
+        d8_flow_direction_raster = d8_arr.astype(np.int32),
+        inlet_connections=inlet_connections,
+        outfall_locations=outfall_locations,
+        inlet_locations=inlet_locations
+    )
+    
+    # run ASI for every seed 
+    seed_mask, seeds = sewershed.get_seed_cells(d8_arr, sewershed.inlet_mask)
+    for r,c in seeds:
+        sewershed.iterative_asi_mass_flux(loading, efficiency, absorption, r,c,f"{r}_{c}")
+    
+    # save the output accumulated raster the specified filepath
+    with rio.open(
+        output,
+        'w',
+        driver='GTiff',
+        height=sewershed.d8_watershed.shape[0],
+        width=sewershed.d8_watershed.shape[1],
+        count=1,
+        dtype=sewershed.d8_accum.dtype,
+        crs=r_crs,
+        transform=r_transform,
+    ) as dst:
+        dst.write(sewershed.d8_accum, 1)

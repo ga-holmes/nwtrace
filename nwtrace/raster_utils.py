@@ -205,3 +205,36 @@ def display_raster_direction(dir_ras, base_ras=None, cmap="viridis", d8_vector_c
     plt.gca().get_yaxis().set_ticklabels([])
 
     plt.show()
+    
+def sample_raster_points(points_gdf, raster_path):
+    
+    sampled_gdf = points_gdf.copy()
+    coords = points_gdf.get_coordinates()
+            
+    with rio.open(raster_path) as src:
+        
+        r_transform = src.transform
+        
+        rows = []
+        cols = []
+        keep = []
+        for _,coord in coords.iterrows():
+            x = coord['x']
+            y = coord['y']
+            
+            row, col = rio.transform.rowcol(r_transform, x, y)
+            
+            rows.append(row)
+            cols.append(col)
+            
+            # filter out out-of-bounds points
+            if row <= 0 or row >= src.height or col <= 0 or col >= src.width:
+                keep.append(False)
+            else:
+                keep.append(True)
+            
+        sampled_gdf['row'] = rows
+        sampled_gdf['col'] = cols
+        sampled_gdf['keep'] = keep
+
+    return sampled_gdf[sampled_gdf['keep']]
