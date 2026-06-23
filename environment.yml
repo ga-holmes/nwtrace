@@ -1,4 +1,4 @@
-name: myenv
+name: nwtrace
 channels:
   - defaults
   - conda-forge
