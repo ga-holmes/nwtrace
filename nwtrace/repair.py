@@ -4,6 +4,30 @@ import pandas as pd
 from tqdm import tqdm
 from shapely.geometry import LineString, MultiLineString, Point
 
+def fix_duplicate_ids(
+    df: gpd.GeoDataFrame | pd.DataFrame, 
+    id_field: str
+):
+    """
+    Added training numbers to IDs that are duplicated in the dataset by order.
+    NOTE: This will break connections in the upstream/downstream columns, and additional repair/verification must be run after using this function.
+
+    Parameters
+    ----------
+    df : gpd.GeoDataFrame | pd.DataFrame
+        The dataset containing duplicate values.
+    id_field : str
+        The column to search for duplicate values.
+    """
+    duplicate_mask = df.duplicated(id_field, keep=False)
+    occurrence = df.groupby(id_field).cumcount()
+
+    df.loc[duplicate_mask, id_field] = (
+        df.loc[duplicate_mask, id_field]
+        + "_"
+        + occurrence.loc[duplicate_mask].astype(str)
+    )
+
 def extract_endpoints(line: LineString | MultiLineString) -> list:
     """
     Given a Shapely LineString or MultiLineString, returns a list containing all/both endpoints
@@ -40,13 +64,13 @@ def find_nearby_geometry(
     distance_threshold: float = 1.0,
 ) -> gpd.GeoDataFrame:
     """
-    Given two datasets of georeferenced vector geometry, finds items in dataset2 that are withing 'distance_threshold' units of items in dataset1
+    Given two datasets of georeferenced vector geometry, finds items in dataset_b that are within 'distance_threshold' units of items in dataset_a
 
     Parameters
     ----------
-    dataset1 : str | Path | gpd.GeoDataFrame
+    dataset_a : str | Path | gpd.GeoDataFrame
         A georeferenced vector geometry dataset
-    dataset2 : str | Path | gpd.GeoDataFrame
+    dataset_b : str | Path | gpd.GeoDataFrame
         A georeferenced vector geometry dataset
     distance_threshold : float, optional
         The maximum distance to search, by default 1
@@ -293,16 +317,27 @@ def repair_connections(
     gpd.GeoDataFrame
         A copy of the primary dataset with updated connections in the 'connection_field' 
     """
-
+    
     # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
     nearby_geometry = find_nearby_geometry(primary_dataset, reference_dataset, distance_threshold=distance_threshold)
 
+    # in the case of duplicate column names, make sure the reference dataset is ignored
+    if connection_field in reference_dataset:
+        nearby_geometry = nearby_geometry.rename(columns={
+            f'{connection_field}_right': connection_field
+        })
+        
     # filter out items where the geometries are already connected
     filtered_geometries = filter_existing_pairs(nearby_geometry, reference_id_field, connection_field)
 
     # filter out additional connections
     for field_name in reference_connection_fields:
-        filtered_geometries = filter_existing_pairs(nearby_geometry, primary_id_field, field_name)
+        
+        # handle duplicate column cases (post-join)
+        if field_name in primary_dataset:
+            field_name = f'{field_name}_left'
+        
+        filtered_geometries = filter_existing_pairs(filtered_geometries, primary_id_field, field_name)
 
     # filter items where the connecting item is the same as itself
     filtered_geometries = filter_existing_pairs(filtered_geometries, primary_id_field, reference_id_field)
