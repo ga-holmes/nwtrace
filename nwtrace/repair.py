@@ -321,7 +321,13 @@ def repair_connections(
     # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
     nearby_geometry = find_nearby_geometry(primary_dataset, reference_dataset, distance_threshold=distance_threshold)
 
-    # in the case of duplicate column names, make sure the reference dataset is ignored
+    # in the case of duplicate column names, make sure the primary dataset is preserved
+    if primary_id_field in reference_dataset:
+        nearby_geometry = nearby_geometry.rename(columns={
+            f'{primary_id_field}_right': primary_id_field
+        })
+        reference_id_field = f'{reference_id_field}_left'
+        
     if connection_field in reference_dataset:
         nearby_geometry = nearby_geometry.rename(columns={
             f'{connection_field}_right': connection_field
@@ -347,7 +353,7 @@ def repair_connections(
 
     best_candidates = filtered_geometries[[primary_id_field, reference_id_field]]
 
-    # rename colums to prepare for updating
+    # rename columns to prepare for updating
     best_candidates = best_candidates.rename(
         columns={
             reference_id_field: connection_field,

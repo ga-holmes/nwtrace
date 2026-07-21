@@ -427,7 +427,8 @@ class NWTrace:
             new_segments: list,
             segment_field: str = "segment_id",
             upstream_field: str = "from",
-            downstream_field: str = "to"
+            downstream_field: str = "to",
+            max_search: int = 10000
         ):
         """
         Adds new segment connections to the existing lookup table when given a list of dictionaries formatted as [{ID: { "from": UPSTREAM_ID, "to": DOWNSTREAM_ID} }]. 
@@ -447,6 +448,8 @@ class NWTrace:
             Field identifier for the upstream connection, by default "from"
         downstream_field : str, optional
             Field identifier for the downstream connection, by default "to"
+        max_search : int, optional
+            The maximum connections to search when adding a new node for a valid connection
         """
 
         # TODO: Check for correct structure of 'new_nodes'
@@ -468,12 +471,26 @@ class NWTrace:
 
             # For each connection, check if entry already exists in node or segment lookup tables
 
+            n = 0
+            old_dwns = s
             # in case where dwns or ups is in the new segment dataset (ex. leads connecting to other leads) traverse until they are not
-            while dwns != None and dwns in new_segments and dwns != s: # must be careful not to infinitely loop
+            while dwns != None and dwns in new_segments and dwns != s and dwns != old_dwns and n < max_search: # must be careful not to infinitely loop
+                old_dwns = dwns
                 dwns = new_segments[dwns].get('to')
-                
-            while ups != None and ups in new_segments and ups != s:
+                n += 1
+            
+            if n >= max_search:
+                raise OverflowError(f"More than ({max_search}) iterations used to find connections to {s}, stuck downstream at {dwns}")
+            
+            n = 0
+            old_ups = s
+            while ups != None and ups in new_segments and ups != s and ups != old_ups and n < max_search:
+                old_ups = ups
                 ups = new_segments[ups].get('from')
+                n += 1
+                
+            if n >= max_search:
+                raise OverflowError(f"More than ({max_search}) iterations used to find connections to {s}, stuck upstream at {dwns}")
 
             # if the connecting end is not a node, search for the next available node
             if dwns in self.dir_segment_lookup:
