@@ -4,6 +4,7 @@ import geopandas as gpd
 from tqdm import tqdm
 import pandas as pd
 from pathlib import Path
+from collections.abc import Callable
 
 from .utils import dfs, dfs_directed, find_nearby_segments
 
@@ -122,8 +123,8 @@ class NWTrace:
         df_grav_dir = self.network_main.rename(columns={self.upstream_field: 'from', self.downstream_field: 'to', self.id_field: 'segment_id'})
         
         # Convert fields to lists (allows extensibility later on)
-        df_grav_dir["from"] = df_grav_dir["from"].apply(lambda x: [x] if pd.notnull(x) else [])
-        df_grav_dir["to"]   = df_grav_dir["to"].apply(lambda x: [x] if pd.notnull(x) else [])
+        df_grav_dir["from"] = df_grav_dir["from"].apply(lambda x: [x] if pd.notnull(x) and len(x) > 0 else [])
+        df_grav_dir["to"]   = df_grav_dir["to"].apply(lambda x: [x] if pd.notnull(x)  and len(x) > 0 else [])
 
         dir_segment_lookup = (df_grav_dir.set_index("segment_id")[["from", "to"]].to_dict(orient="index"))
 
@@ -147,7 +148,9 @@ class NWTrace:
         self,
         target_endpoints, 
         upstream_only=False,
-        downstream_only=False, 
+        downstream_only=False,
+        custom_dfs_func: Callable = None,
+        custom_dfs_kwargs: set = None
     ) -> list:
         """
         Trace all line segments in a geospatial sewer network connected to a set of target endpoints.
@@ -157,8 +160,6 @@ class NWTrace:
 
         Parameters
         ----------
-        sewer_network_path : str
-            Path to the geospatial file containing sewer segments.
 
         target_endpoints : list
             List of node IDs representing the starting points for tracing.
@@ -172,6 +173,14 @@ class NWTrace:
             If True, only follow downstream connections when tracing the network.
             If False, follow all connections (upstream and downstream).
             If both upstream_only and downstream_only are True, all connections will be followed (upstream and downstream)
+            
+        custom_dfs_func : Callable, default None
+            Can provide a custom depth-first-search function if desired to override the defaults (direcitonal or non-direcitonal).
+            Must have structure/arguments func(segment_lookup, node_lookup, v (outfall or endpoint), visited, edges, **custom_dfs_kwargs (may be empty)).
+            NOTE that any custom function may break the program, only use this if you know what you're doing.
+        
+        custom_dfs_kwargs : set, default {}
+            Arguments for the custom dfs_func provided. Ignored if dfs_func is None
 
         Returns
         -------
@@ -196,6 +205,7 @@ class NWTrace:
 
         # build tables
         # Directional
+            
         if upstream_only ^ downstream_only:
 
             if self.dir_node_lookup == None or self.dir_segment_lookup == None:
@@ -205,7 +215,7 @@ class NWTrace:
             segment_lookup = self.dir_segment_lookup
 
             dfs_func = dfs_directed
-            dsf_kwargs = {"downstream": downstream_only}
+            dfs_kwargs = {"downstream": downstream_only}
 
         # Non-directional
         else:
@@ -217,14 +227,27 @@ class NWTrace:
             segment_lookup = self.segment_lookup
 
             dfs_func = dfs
-            dsf_kwargs = {}
+            dfs_kwargs = {}
+        
+        # if not None, replace the dfs & kwargs with our own
+        if custom_dfs_func != None:
+            if self.verbose:
+                print(f"Using custom DFS function {custom_dfs_func} with custum args {custom_dfs_kwargs.keys()}.")
+                
+            dfs_func = custom_dfs_func
+            dfs_kwargs = custom_dfs_kwargs
+            
 
         # run a depth-first-search of the network
         if self.verbose:
             print(f"Searching Network:")
-
-        for o in tqdm(target_endpoints, disable=(not self.verbose)):
-            visited_list, edges_list = dfs_func(segment_lookup, node_lookup, o, set(), set(), **dsf_kwargs)
+        
+        all_visited = []
+        
+        for o in tqdm(target_endpoints, disable=(not self.verbose), total=len(target_endpoints)):
+            visited_list, edges_list = dfs_func(segment_lookup, node_lookup, o, set(), set(), **dfs_kwargs)
+            
+            all_visited += visited_list
             
             for e in edges_list:
                 all_connected.append({"segment_id": e, "exit_point": o})
@@ -234,16 +257,18 @@ class NWTrace:
             #     print(f"\tfound {len(edges_list)} connections to {o}")
 
         if self.verbose:
-            print(f"\nFound {len(edges_list)} connections overall to all {len(target_endpoints)} endpoints")
+            print(f"\nFound {len(all_connected)} connections overall to all {len(target_endpoints)} endpoints")
             print(f"Finished!")
 
-        return all_connected
+        return all_visited, all_connected
 
     def trace_sewershed(
         self,
         target_endpoint, 
         upstream_only=False,
         downstream_only=False,
+        custom_dfs_func: Callable = None,
+        custom_dfs_kwargs: set = None
     ):    
         """
         Wrapper for `trace_sewersheds` that traces segments connected to a single target endpoint.
@@ -267,6 +292,14 @@ class NWTrace:
             If True, only follow downstream connections when tracing the network.
             If False, follow all connections (upstream and downstream).
             If both upstream_only and downstream_only are True, all connections will be followed (upstream and downstream)
+            
+        custom_dfs_func : Callable, default None
+            Can provide a custom depth-first-search function if desired to override the defaults (direcitonal or non-direcitonal).
+            Must have structure/arguments func(segment_lookup, node_lookup, v (outfall or endpoint), visited, edges, **custom_dfs_kwargs (may be empty)).
+            NOTE that any custom function may break the program, only use this if you know what you're doing.
+        
+        custom_dfs_kwargs : set, default {}
+            Arguments for the custom dfs_func provided. Ignored if dfs_func is None
 
         Returns
         -------
@@ -278,7 +311,9 @@ class NWTrace:
         return self.trace_sewersheds(
             [target_endpoint], 
             upstream_only=upstream_only, 
-            downstream_only=downstream_only
+            downstream_only=downstream_only,
+            custom_dfs_func=custom_dfs_func,
+            custom_dfs_kwargs=custom_dfs_kwargs
         )
 
     # NOTE: Currently only supports upstream connections, may extend to downstream as well later
