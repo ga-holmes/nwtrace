@@ -285,7 +285,7 @@ def repair_connections(
     primary_id_field: str,
     reference_id_field: str,
     connection_field: str,
-    reference_connection_fields: list = [],
+    reference_connection_fields: list | None = None,
     distance_threshold: int = 1,
     reset_index: bool = True
 ) -> gpd.GeoDataFrame:
@@ -317,6 +317,9 @@ def repair_connections(
     gpd.GeoDataFrame
         A copy of the primary dataset with updated connections in the 'connection_field' 
     """
+    
+    if reference_connection_fields == None:
+        reference_connection_fields = []
     
     # Get the endpoints of each segment with a spatial error, add to a dataset of endpoints
     nearby_geometry = find_nearby_geometry(primary_dataset, reference_dataset, distance_threshold=distance_threshold)
@@ -353,16 +356,22 @@ def repair_connections(
 
     best_candidates = filtered_geometries[[primary_id_field, reference_id_field]]
 
+    # account for cases where there is no nearby connection (disconnect)
+    # set the index to the id field then make sure it's in the same order as the primary dataset
+    best_candidates = best_candidates.set_index(primary_id_field).reindex(primary_dataset[primary_id_field])
+    
     # rename columns to prepare for updating
     best_candidates = best_candidates.rename(
         columns={
             reference_id_field: connection_field,
         }
-    ).set_index(primary_id_field, drop=False)
+    )
 
     # update the primary dataset with the new values
     primary_fixed = primary_dataset.set_index(primary_id_field, drop=False)
-    primary_fixed.update(best_candidates)
+    
+    primary_fixed[connection_field] = best_candidates[connection_field].to_numpy()
+    # primary_fixed.update(best_candidates)
 
     if reset_index:
         primary_fixed = primary_fixed.reset_index(drop=True)
@@ -449,8 +458,17 @@ def repair_segment_connections(
     repaired_segments = segments.set_index(segment_id_field, drop=False)
 
     # update the input dataset
-    repaired_segments.update(repair_segments_a)
-    repaired_segments.update(repair_segments_b)
+    # repaired_segments.update(repair_segments_a)
+    # repaired_segments.update(repair_segments_b)
+    
+    repaired_segments[upstream_field] = repair_segments_a.set_index(
+        segment_id_field
+    )[upstream_field]
+
+    repaired_segments[downstream_field] = repair_segments_b.set_index(
+        segment_id_field
+    )[downstream_field]
+
 
     return repaired_segments.reset_index(drop=True)
 
