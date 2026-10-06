@@ -74,11 +74,11 @@ After the program is finished, an output `.csv` file will be generated named bas
 
 There is a conflict with CATALYST Professional software on some systems, where alternate GDAL DLLs are exposed to the system PATH, causing a conflict & import error with the rasterio package - this occurs independently of NWtrace for any rasterio installation on such systems.
 
-If you cannot load nwtrace or rasterio, activate your conda environment from the Anaconda prompt after installing, then run either:\
-`set PATH=%PATH:C:\PCI Geomatics\CATALYST Professional\exe;=%` to remove CATALYST from the PATH for this environment (recommended if CATALYST is the only source of the issue)\
-or\
-`set PATH=%CONDA_PREFIX%;%CONDA_PREFIX%\Library\bin;%CONDA_PREFIX%\Scripts` to restrict the path to the conda environment (ex. git will not work, however)\
-\
+If you cannot load nwtrace or rasterio, activate your conda environment from the Anaconda prompt after installing, then run either:
+- `set PATH=%PATH:C:\PCI Geomatics\CATALYST Professional\exe;=%` to remove CATALYST from the PATH for this environment (recommended if CATALYST is the only source of the issue)
+or
+- `set PATH=%CONDA_PREFIX%;%CONDA_PREFIX%\Library\bin;%CONDA_PREFIX%\Scripts` to restrict the path to the conda environment (ex. git will not work, however)
+
 then run any scripts from the prompt. If you are using an IDE (such as vscode), start the editor from within the Anaconda prompt (ex. `code .`).
 - You can also open the command prompt or VSCode using this fix by running `nwtrace-cmd.bat` or `nwtrace-vscode.bat` respectively.
 - You can run `test_import.py` in these environments to see if this works.
