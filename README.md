@@ -18,9 +18,9 @@ This tool is a work-in-progress and therefore several features are not implement
 - [X] Add tools to verify spatial geometry
 - [ ] Document spatial geometry verification tools
 - [X] Add robust error handling
-- [ ] Refactor as module
+- [X] Refactor as module
 - [ ] Generalize to other use-cases
-- [ ] Add option to output to spatial data (apply the subnetwork to spatial data)
+- [X] Add option to output to spatial data (apply the subnetwork to spatial data)
 - [X] Interpret informal connected network from geospatial connections
 - [ ] Add adjacent QGIS plugin
 
