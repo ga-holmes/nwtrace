@@ -458,16 +458,16 @@ def repair_segment_connections(
     repaired_segments = segments.set_index(segment_id_field, drop=False)
 
     # update the input dataset
-    # repaired_segments.update(repair_segments_a)
-    # repaired_segments.update(repair_segments_b)
+    repaired_segments.update(repair_segments_a)
+    repaired_segments.update(repair_segments_b)
     
-    repaired_segments[upstream_field] = repair_segments_a.set_index(
-        segment_id_field
-    )[upstream_field]
+    # repaired_segments[upstream_field] = repair_segments_a.set_index(
+    #     segment_id_field
+    # )[upstream_field]
 
-    repaired_segments[downstream_field] = repair_segments_b.set_index(
-        segment_id_field
-    )[downstream_field]
+    # repaired_segments[downstream_field] = repair_segments_b.set_index(
+    #     segment_id_field
+    # )[downstream_field]
 
 
     return repaired_segments.reset_index(drop=True)

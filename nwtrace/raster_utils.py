@@ -1,8 +1,7 @@
-
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
-import rasterio as rio
+from ._rasterio import get_rasterio
 
 class conversions():
 
@@ -107,6 +106,8 @@ class conversions():
             Specify the file name to output the converted raster to, by default, will append 'converted_' to the given filename.
         """
 
+        rio = get_rasterio()
+
         if output_filename == None:
             output_filename = f"converted_{d8_direction_raster}"
         
@@ -131,6 +132,8 @@ class conversions():
 
 def display_raster(ras, cmap="viridis", label_table=None):
     
+    rio = get_rasterio()
+
     if isinstance(ras, (str, Path)):
 
         with rio.open(ras) as src:
@@ -161,6 +164,8 @@ def display_raster(ras, cmap="viridis", label_table=None):
 
 # uses arrows to show cell direction given a D8 raster
 def display_raster_direction(dir_ras, base_ras=None, cmap="viridis", d8_vector_conversion=conversions.whitebox_to_vector):
+
+    rio = get_rasterio()
     
     if isinstance(dir_ras, (str, Path)):
 
@@ -207,6 +212,8 @@ def display_raster_direction(dir_ras, base_ras=None, cmap="viridis", d8_vector_c
     plt.show()
     
 def sample_raster_points(points_gdf, raster_path):
+
+    rio = get_rasterio()
     
     sampled_gdf = points_gdf.copy()
     coords = points_gdf.get_coordinates()

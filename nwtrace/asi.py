@@ -1,13 +1,19 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import rasterio as rio
+
 # Adaptive Stormwater Infrastructure (ASI) Algorithm, adapted from Choi et al. (2011) : 10.1016/j.cageo.2010.07.008
 import time
 
 import tempfile
 import numpy as np
 from pathlib import Path
-import rasterio as rio
 import geopandas as gpd
 from whitebox import WhiteboxTools
 from .raster_utils import sample_raster_points
+from ._rasterio import get_rasterio
 import os
 
 # Defining globals here (will likely be an object later)
@@ -72,6 +78,8 @@ class ASI:
         ValueError
             If the d8_flow_direction_raster is not a correct type and cannot be converted to a numpy array.
         """
+
+        rio = get_rasterio()
 
         # load d8 file using rasterio or assign
         if isinstance(d8_flow_direction_raster, (str, Path)):
@@ -476,6 +484,8 @@ class ASI:
         # Stack arguments: (row, column, watershed_id, outfall_id: may be none, ORDER (PRE=0, POST=1))
         # 'ORDER' is used to represent whether, for each cell visit, we should find children (i.e. get neighbours), or accumulate flow (flow cannot accumulate until we've reached the 'top' of the DEM)
 
+        rio = get_rasterio()
+
         # if accumulation has already been computed:
         if self.d8_accum[r0, c0] != 0:
             # re-initialize the rasters if they've already been computed
@@ -611,6 +621,8 @@ def asi_flow_accumulation(
         Path to a D8 flow direction raster if it has already been generated, if none, will generate a D8 raster for the given DEM.
     """
     
+    rio = get_rasterio()
+
     # TODO: verify argument validity here
     if isinstance(inlets, (str, Path)):
         inlets = gpd.read_file(inlets)
@@ -755,6 +767,8 @@ def asi_watershed(
     d8_file : str | Path = None
         Path to a D8 flow direction raster if it has already been generated, if none, will generate a D8 raster for the given DEM.
     """
+
+    rio = get_rasterio()
     
     # TODO: verify argument validity here
     if isinstance(inlets, (str, Path)):
@@ -912,7 +926,9 @@ def asi_mass_flux(
     connection_field : str
         The column name in the inlet data relating each inlet to an outfall.
     """
-    
+
+    rio = get_rasterio()
+
     # TODO: verify argument validity here
     if isinstance(inlets, (str, Path)):
         inlets = gpd.read_file(inlets)

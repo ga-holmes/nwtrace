@@ -6,6 +6,7 @@ python=3.13.7
 geopandas=1.1.1
 pandas=2.3.3
 tqdm=4.67.1
+gdal
 rasterio
 conda-forge::whitebox_tools
 ipykernel
