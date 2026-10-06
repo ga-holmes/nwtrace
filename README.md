@@ -40,14 +40,6 @@ Conda is recommended as an environment manager for installing python libraries. 
 
 ---
 
-**NOTE**: There is a known issue/conflict with installations of CATALYST professional software where GDAL installations conflict with rasterio. If you cannot load nwtrace or rasterio, activate your conda environment from the Anaconda prompt after installing, then run either: 
-`set PATH=%PATH:C:\PCI Geomatics\CATALYST Professional\exe;=%` to remove CATALYST from the PATH for this environment (recommended if CATALYST is the only source of the issue)
-or
-`set PATH=%CONDA_PREFIX%;%CONDA_PREFIX%\Library\bin;%CONDA_PREFIX%\Scripts` to restrict the path to the conda environment (ex. git will not work, however)
-then run any scripts from the prompt. If you are using an IDE (such as vscode), start the editor from within the Anaconda prompt (ex. `code .`).
-- You can also open the command prompt or VSCode using this fix by running `nwtrace-cmd.bat` or `nwtrace-vscode.bat` respectively.
-- You can run `test_import.py` in these environments to see if this works.
-
 ### Sample Data
 Some sample files are included for testing the library yourself are provided. This includes a script (`sstrace.py`) and a notebook (`sstrace.ipynb`) that can be run as a python notebook in VSCode or software of your choice. The sample data should result in traced gravity main sewer networks from seven outfalls in the City of Toronto. A sample dataset is provided (`sewer_test.geojson`) which is a subset of the City of Toronto gravity main sewer network provided by [Open Data Toronto](https://open.toronto.ca/dataset/sewer-gravity-mains/), clipped to a subwatershed of the Humber River (Note that further analysis using this clipped data may result in errors where the traced network expands beyond the clip boundary).
 
@@ -75,3 +67,17 @@ After the program is finished, an output `.csv` file will be generated named bas
 - Set selection to 'Not equal to', and type 'NULL' in the box
 - Click 'Select Features'. The selected lines will represent the network as connected to the chosen outfalls!
 - You can then extract this from the main file by running the 'Extract selected features' or right click the layer and export selected features.
+
+---
+
+## Known Issues:
+
+There is a conflict with CATALYST Professional software on some systems, where alternate GDAL DLLs are exposed to the system PATH, causing a conflict & import error with the rasterio package - this occurs independently of NWtrace for any rasterio installation on such systems.
+
+If you cannot load nwtrace or rasterio, activate your conda environment from the Anaconda prompt after installing, then run either: 
+`set PATH=%PATH:C:\PCI Geomatics\CATALYST Professional\exe;=%` to remove CATALYST from the PATH for this environment (recommended if CATALYST is the only source of the issue)
+or
+`set PATH=%CONDA_PREFIX%;%CONDA_PREFIX%\Library\bin;%CONDA_PREFIX%\Scripts` to restrict the path to the conda environment (ex. git will not work, however)
+then run any scripts from the prompt. If you are using an IDE (such as vscode), start the editor from within the Anaconda prompt (ex. `code .`).
+- You can also open the command prompt or VSCode using this fix by running `nwtrace-cmd.bat` or `nwtrace-vscode.bat` respectively.
+- You can run `test_import.py` in these environments to see if this works.
